@@ -1,8 +1,10 @@
+import { useEffect, useState } from "react";
 import { useProjectStore } from "./store/projectStore";
 import { Editor2D } from "./components/Editor2D";
 import { MaterialsPanel } from "./components/MaterialsPanel";
 import { DivisionProperties } from "./components/DivisionProperties";
 import type { Project } from "./types/project";
+import { getPointer, loadProject, saveProject, setPointer } from "./lib/projectSync";
 import "./index.css";
 
 const KIND_LABELS: Record<Project["kind"], string> = {
@@ -16,6 +18,30 @@ function App() {
   const addDivision = useProjectStore((s) => s.addDivision);
   const newProject = useProjectStore((s) => s.newProject);
   const updateProjectMeta = useProjectStore((s) => s.updateProjectMeta);
+  const hydrate = useProjectStore((s) => s.hydrate);
+
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const pointer = getPointer();
+      const loaded = pointer ? await loadProject(pointer) : null;
+      if (cancelled) return;
+      if (loaded) {
+        hydrate(loaded);
+      } else {
+        const state = useProjectStore.getState();
+        await saveProject({ project: state.project, materials: state.materials, customMaterials: state.customMaterials });
+        setPointer(state.project.id);
+      }
+      if (!cancelled) setReady(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div style={{ maxWidth: 1200, margin: "0 auto", padding: 24, fontFamily: "sans-serif" }}>
@@ -42,17 +68,19 @@ function App() {
         <button
           type="button"
           onClick={() => {
-            if (confirm("Começar um novo projecto? O projecto actual guardado será substituído.")) {
+            if (confirm("Começar um novo projecto? O projecto actual guardado (nesta conta) fica no histórico, mas deixa de estar aberto aqui.")) {
               newProject("Novo projecto", "construir");
             }
           }}
         >
           Novo projecto
         </button>
-        <span style={{ fontSize: 12, color: "#888" }}>Guardado automaticamente neste dispositivo</span>
+        <span style={{ fontSize: 12, color: "#888" }}>
+          {ready ? "Guardado automaticamente na cloud" : "A carregar…"}
+        </span>
       </header>
 
-      <button type="button" onClick={addDivision} style={{ marginBottom: 12 }}>
+      <button type="button" onClick={addDivision} style={{ marginBottom: 12 }} disabled={!ready}>
         + Adicionar divisão
       </button>
 
