@@ -1,4 +1,4 @@
-export type WallType = "tijolo-furado" | "bloco-cimento";
+import type { BlockOverride } from "../lib/blocks";
 
 export interface Division {
   id: string;
@@ -8,11 +8,13 @@ export interface Division {
   y: number;
   width: number;
   height: number;
-  wallType: WallType;
   wallHeightM: number;
+  blockSpecId: string;
+  /** dimensões personalizadas, substituem parcialmente o catálogo */
+  blockOverride?: BlockOverride;
 }
 
-export type MaterialUnit = "saco" | "m3" | "un" | "kg" | "L";
+export type MaterialUnit = "saco" | "m3" | "un" | "kg" | "L" | "m2";
 
 export interface MaterialLine {
   materialId: string;
@@ -23,6 +25,15 @@ export interface MaterialLine {
   suggestedPrice: number;
   /** preço que o utilizador inseriu para este projecto; se undefined, usa suggestedPrice */
   userPrice?: number;
+}
+
+/** item de conta adicionado livremente pelo utilizador (tinta, gesso, mão-de-obra, etc.) */
+export interface CustomMaterialLine {
+  id: string;
+  name: string;
+  unit: MaterialUnit;
+  quantity: number;
+  price: number;
 }
 
 export interface Project {

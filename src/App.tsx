@@ -1,6 +1,7 @@
 import { useProjectStore } from "./store/projectStore";
 import { Editor2D } from "./components/Editor2D";
 import { MaterialsPanel } from "./components/MaterialsPanel";
+import { DivisionProperties } from "./components/DivisionProperties";
 import "./index.css";
 
 function App() {
@@ -8,7 +9,7 @@ function App() {
   const addDivision = useProjectStore((s) => s.addDivision);
 
   return (
-    <div style={{ maxWidth: 1000, margin: "0 auto", padding: 24, fontFamily: "sans-serif" }}>
+    <div style={{ maxWidth: 1200, margin: "0 auto", padding: 24, fontFamily: "sans-serif" }}>
       <header style={{ marginBottom: 16 }}>
         <h1 style={{ margin: 0 }}>Kubata</h1>
         <p style={{ color: "#666", margin: "4px 0 0" }}>{projectName}</p>
@@ -18,8 +19,9 @@ function App() {
         + Adicionar divisão
       </button>
 
-      <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", gap: 24, flexWrap: "wrap", alignItems: "flex-start" }}>
         <Editor2D />
+        <DivisionProperties />
         <MaterialsPanel />
       </div>
     </div>
