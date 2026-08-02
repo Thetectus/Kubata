@@ -3,8 +3,9 @@ import { Stage, Layer, Rect, Text, Group } from "react-konva";
 import type Konva from "konva";
 import { useProjectStore } from "../store/projectStore";
 import { resolveBlockSpec } from "../lib/blocks";
-import { generateWallBlocks, type WallBlockRect } from "../lib/wallBlocks";
+import { generateWallBlocks, type OpeningsBySide, type WallBlockRect } from "../lib/wallBlocks";
 import { WallBlockShape } from "./WallBlockShape";
+import type { Division, Opening } from "../types/project";
 
 const PX_PER_METER = 30;
 const STAGE_WIDTH = 640;
@@ -15,6 +16,34 @@ const BLOCK_FILL: Record<string, string> = {
   tijolo: "#c96f3c",
   bloco: "#b7b0a3",
 };
+const OPENING_FILL: Record<Opening["type"], string> = {
+  porta: "#7c4a1e",
+  janela: "#8fc7e8",
+};
+
+function openingsBySide(division: Division): OpeningsBySide {
+  const grouped: OpeningsBySide = {};
+  for (const o of division.openings) {
+    const range = { offsetPx: o.offsetM * PX_PER_METER, widthPx: o.widthM * PX_PER_METER };
+    (grouped[o.side] ??= []).push(range);
+  }
+  return grouped;
+}
+
+function openingMarkerRect(o: Opening, widthPx: number, heightPx: number, thicknessPx: number) {
+  const offsetPx = o.offsetM * PX_PER_METER;
+  const widthOpeningPx = o.widthM * PX_PER_METER;
+  switch (o.side) {
+    case "top":
+      return { x: offsetPx, y: 0, width: widthOpeningPx, height: thicknessPx };
+    case "bottom":
+      return { x: offsetPx, y: heightPx - thicknessPx, width: widthOpeningPx, height: thicknessPx };
+    case "left":
+      return { x: 0, y: offsetPx, width: thicknessPx, height: widthOpeningPx };
+    case "right":
+      return { x: widthPx - thicknessPx, y: offsetPx, width: thicknessPx, height: widthOpeningPx };
+  }
+}
 
 export function Editor2D() {
   const divisions = useProjectStore((s) => s.project.divisions);
@@ -32,8 +61,9 @@ export function Editor2D() {
         const spec = resolveBlockSpec(d.blockSpecId, d.blockOverride);
         const widthPx = d.width * PX_PER_METER;
         const heightPx = d.height * PX_PER_METER;
-        const blocks = generateWallBlocks(widthPx, heightPx, spec, PX_PER_METER);
-        return { division: d, spec, widthPx, heightPx, blocks };
+        const blocks = generateWallBlocks(widthPx, heightPx, spec, PX_PER_METER, openingsBySide(d));
+        const thicknessPx = Math.max(4, (spec.thicknessCm / 100) * PX_PER_METER);
+        return { division: d, spec, widthPx, heightPx, blocks, thicknessPx };
       }),
     [divisions],
   );
@@ -138,7 +168,7 @@ export function Editor2D() {
         onWheel={handleWheel}
       >
         <Layer>
-          {divisionsRender.map(({ division: d, spec, widthPx, heightPx, blocks }) => {
+          {divisionsRender.map(({ division: d, spec, widthPx, heightPx, blocks, thicknessPx }) => {
             const prevCount = prevBlockCounts.current.get(d.id) ?? 0;
             const selected = d.id === selectedDivisionId;
 
@@ -173,11 +203,27 @@ export function Editor2D() {
                     y={b.y}
                     width={b.width}
                     height={b.height}
-                    fill={BLOCK_FILL[spec.category]}
+                    fill={d.wallColor ?? BLOCK_FILL[spec.category]}
                     animate={i >= prevCount}
                     delayMs={Math.min(Math.max(i - prevCount, 0), 40) * 12}
                   />
                 ))}
+
+                {d.openings.map((o) => {
+                  const r = openingMarkerRect(o, widthPx, heightPx, thicknessPx);
+                  return (
+                    <Rect
+                      key={o.id}
+                      x={r.x}
+                      y={r.y}
+                      width={r.width}
+                      height={r.height}
+                      fill={OPENING_FILL[o.type]}
+                      stroke="#3a2a1a"
+                      strokeWidth={0.5}
+                    />
+                  );
+                })}
 
                 <Text
                   text={`${d.label}\n${d.width}m × ${d.height}m`}

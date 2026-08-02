@@ -1,5 +1,17 @@
 import type { BlockOverride } from "../lib/blocks";
 
+export type WallSide = "top" | "right" | "bottom" | "left";
+export type OpeningType = "porta" | "janela";
+
+export interface Opening {
+  id: string;
+  side: WallSide;
+  type: OpeningType;
+  /** metros, distância ao canto inicial do lado */
+  offsetM: number;
+  widthM: number;
+}
+
 export interface Division {
   id: string;
   label: string;
@@ -12,6 +24,9 @@ export interface Division {
   blockSpecId: string;
   /** dimensões personalizadas, substituem parcialmente o catálogo */
   blockOverride?: BlockOverride;
+  /** cor de acabamento/pintura da parede, se definida pelo utilizador */
+  wallColor?: string;
+  openings: Opening[];
 }
 
 export type MaterialUnit = "saco" | "m3" | "un" | "kg" | "L" | "m2";

@@ -1,8 +1,9 @@
 import { create } from "zustand";
-import type { Division, MaterialLine, Project } from "../types/project";
+import type { Division, MaterialLine, Opening, Project } from "../types/project";
 import { calculateComputedMaterials } from "../lib/materials";
 import { BLOCK_CATALOG } from "../lib/blocks";
 import type { PersistedProject } from "../lib/projectSync";
+import { instantiateTemplate, type ProjectTemplate } from "../lib/templates";
 
 interface ProjectState {
   project: Project;
@@ -17,8 +18,11 @@ interface ProjectState {
   updateCustomMaterial: (id: string, patch: Partial<MaterialLine>) => void;
   removeCustomMaterial: (id: string) => void;
   newProject: (name: string, kind: Project["kind"]) => void;
+  newProjectFromTemplate: (template: ProjectTemplate) => void;
   updateProjectMeta: (patch: Partial<Pick<Project, "name" | "kind">>) => void;
   hydrate: (payload: PersistedProject) => void;
+  addOpening: (divisionId: string, opening: Omit<Opening, "id">) => void;
+  removeOpening: (divisionId: string, openingId: string) => void;
 }
 
 /** Recalcula as linhas "computed" a partir das divisões, preserva as "custom" tal como estão. */
@@ -52,6 +56,7 @@ export const useProjectStore = create<ProjectState>()((set) => ({
         height: 3,
         wallHeightM: 3,
         blockSpecId: BLOCK_CATALOG[1].id,
+        openings: [],
       };
       const project = { ...state.project, divisions: [...state.project.divisions, division] };
       return {
@@ -119,6 +124,17 @@ export const useProjectStore = create<ProjectState>()((set) => ({
     });
   },
 
+  newProjectFromTemplate: (template) => {
+    set(() => {
+      const project = instantiateTemplate(template);
+      return {
+        project,
+        materials: recalculate(project, []),
+        selectedDivisionId: project.divisions[0]?.id ?? null,
+      };
+    });
+  },
+
   updateProjectMeta: (patch) => {
     set((state) => ({ project: { ...state.project, ...patch } }));
   },
@@ -129,5 +145,27 @@ export const useProjectStore = create<ProjectState>()((set) => ({
       materials: payload.materials,
       selectedDivisionId: null,
     }));
+  },
+
+  addOpening: (divisionId, opening) => {
+    set((state) => {
+      const divisions = state.project.divisions.map((d) =>
+        d.id === divisionId
+          ? { ...d, openings: [...d.openings, { ...opening, id: crypto.randomUUID() }] }
+          : d,
+      );
+      const project = { ...state.project, divisions };
+      return { project, materials: recalculate(project, state.materials) };
+    });
+  },
+
+  removeOpening: (divisionId, openingId) => {
+    set((state) => {
+      const divisions = state.project.divisions.map((d) =>
+        d.id === divisionId ? { ...d, openings: d.openings.filter((o) => o.id !== openingId) } : d,
+      );
+      const project = { ...state.project, divisions };
+      return { project, materials: recalculate(project, state.materials) };
+    });
   },
 }));

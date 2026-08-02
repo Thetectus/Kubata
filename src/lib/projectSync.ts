@@ -27,8 +27,9 @@ export async function loadProject(id: string): Promise<PersistedProject | null> 
   const { data, error } = await supabase.from("projects").select("id, name, kind, data").eq("id", id).maybeSingle();
   if (error || !data) return null;
   const row = data as ProjectRow;
+  const divisions = (row.data?.divisions ?? []).map((d) => ({ ...d, openings: d.openings ?? [] }));
   return {
-    project: { id: row.id, name: row.name, kind: row.kind, divisions: row.data?.divisions ?? [] },
+    project: { id: row.id, name: row.name, kind: row.kind, divisions },
     materials: row.data?.materials ?? [],
   };
 }

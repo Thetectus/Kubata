@@ -1,12 +1,24 @@
-import type { CSSProperties } from "react";
+import { useState, type CSSProperties } from "react";
 import { useProjectStore } from "../store/projectStore";
 import { BLOCK_CATALOG, resolveBlockSpec } from "../lib/blocks";
+import { WALL_SIDES, sideLengthM } from "../lib/openings";
+import type { OpeningType, WallSide } from "../types/project";
+
+const SIDE_LABELS: Record<WallSide, string> = { top: "cima", right: "direita", bottom: "baixo", left: "esquerda" };
+const TYPE_LABELS: Record<OpeningType, string> = { porta: "Porta", janela: "Janela" };
 
 export function DivisionProperties() {
   const divisions = useProjectStore((s) => s.project.divisions);
   const selectedDivisionId = useProjectStore((s) => s.selectedDivisionId);
   const updateDivision = useProjectStore((s) => s.updateDivision);
   const removeDivision = useProjectStore((s) => s.removeDivision);
+  const addOpening = useProjectStore((s) => s.addOpening);
+  const removeOpening = useProjectStore((s) => s.removeOpening);
+
+  const [newSide, setNewSide] = useState<WallSide>("bottom");
+  const [newType, setNewType] = useState<OpeningType>("porta");
+  const [newOffset, setNewOffset] = useState(0.3);
+  const [newWidth, setNewWidth] = useState(0.9);
 
   const division = divisions.find((d) => d.id === selectedDivisionId);
   if (!division) {
@@ -111,6 +123,83 @@ export function DivisionProperties() {
           Repor dimensão padrão
         </button>
       )}
+
+      <label style={row}>
+        Cor da parede / acabamento
+        <input
+          type="color"
+          value={division.wallColor ?? "#b7b0a3"}
+          onChange={(e) => updateDivision(division.id, { wallColor: e.target.value })}
+        />
+      </label>
+      {division.wallColor && (
+        <button
+          type="button"
+          onClick={() => updateDivision(division.id, { wallColor: undefined })}
+          style={{ fontSize: 12, marginBottom: 6 }}
+        >
+          Repor cor padrão do bloco
+        </button>
+      )}
+
+      <h3 style={{ fontSize: 14, margin: "12px 0 6px" }}>Portas e janelas</h3>
+      {division.openings.length === 0 && (
+        <p style={{ fontSize: 12, color: "#888" }}>Nenhuma abertura adicionada.</p>
+      )}
+      {division.openings.map((o) => (
+        <div key={o.id} style={{ ...row, fontSize: 12 }}>
+          <span>
+            {TYPE_LABELS[o.type]} — lado {SIDE_LABELS[o.side]}, {o.widthM}m (a {o.offsetM}m do canto)
+          </span>
+          <button type="button" onClick={() => removeOpening(division.id, o.id)} aria-label="Remover abertura">
+            ✕
+          </button>
+        </div>
+      ))}
+
+      <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center", marginTop: 6 }}>
+        <select value={newType} onChange={(e) => setNewType(e.target.value as OpeningType)}>
+          <option value="porta">Porta</option>
+          <option value="janela">Janela</option>
+        </select>
+        <select value={newSide} onChange={(e) => setNewSide(e.target.value as WallSide)}>
+          {WALL_SIDES.map((s) => (
+            <option key={s} value={s}>
+              lado {SIDE_LABELS[s]}
+            </option>
+          ))}
+        </select>
+        <input
+          type="number"
+          step={0.1}
+          value={newOffset}
+          onChange={(e) => setNewOffset(e.target.valueAsNumber || 0)}
+          style={{ width: 50 }}
+          title="Distância ao canto (m)"
+        />
+        <input
+          type="number"
+          step={0.1}
+          value={newWidth}
+          onChange={(e) => setNewWidth(e.target.valueAsNumber || 0.1)}
+          style={{ width: 50 }}
+          title="Largura (m)"
+        />
+        <button
+          type="button"
+          onClick={() => {
+            const maxOffset = Math.max(0, sideLengthM(division, newSide) - newWidth);
+            addOpening(division.id, {
+              type: newType,
+              side: newSide,
+              offsetM: Math.min(newOffset, maxOffset),
+              widthM: newWidth,
+            });
+          }}
+        >
+          + Adicionar
+        </button>
+      </div>
 
       <button
         type="button"

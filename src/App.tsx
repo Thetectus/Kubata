@@ -5,6 +5,7 @@ import { MaterialsPanel } from "./components/MaterialsPanel";
 import { DivisionProperties } from "./components/DivisionProperties";
 import type { Project } from "./types/project";
 import { getPointer, loadProject, saveProject, setPointer } from "./lib/projectSync";
+import { PROJECT_TEMPLATES } from "./lib/templates";
 import "./index.css";
 
 const KIND_LABELS: Record<Project["kind"], string> = {
@@ -16,7 +17,7 @@ const KIND_LABELS: Record<Project["kind"], string> = {
 function App() {
   const project = useProjectStore((s) => s.project);
   const addDivision = useProjectStore((s) => s.addDivision);
-  const newProject = useProjectStore((s) => s.newProject);
+  const newProjectFromTemplate = useProjectStore((s) => s.newProjectFromTemplate);
   const updateProjectMeta = useProjectStore((s) => s.updateProjectMeta);
   const hydrate = useProjectStore((s) => s.hydrate);
 
@@ -65,16 +66,30 @@ function App() {
             </option>
           ))}
         </select>
-        <button
-          type="button"
-          onClick={() => {
-            if (confirm("Começar um novo projecto? O projecto actual guardado (nesta conta) fica no histórico, mas deixa de estar aberto aqui.")) {
-              newProject("Novo projecto", "construir");
+        <select
+          defaultValue=""
+          onChange={(e) => {
+            const template = PROJECT_TEMPLATES.find((t) => t.id === e.target.value);
+            if (!template) return;
+            if (
+              confirm(
+                "Começar um novo projecto a partir deste modelo? O projecto actual guardado (nesta conta) fica no histórico, mas deixa de estar aberto aqui.",
+              )
+            ) {
+              newProjectFromTemplate(template);
             }
+            e.target.value = "";
           }}
         >
-          Novo projecto
-        </button>
+          <option value="" disabled>
+            Novo projecto a partir de…
+          </option>
+          {PROJECT_TEMPLATES.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.label}
+            </option>
+          ))}
+        </select>
         <span style={{ fontSize: 12, color: "#888" }}>
           {ready ? "Guardado automaticamente na cloud" : "A carregar…"}
         </span>
