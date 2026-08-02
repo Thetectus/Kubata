@@ -6,6 +6,10 @@ import { DivisionProperties } from "./components/DivisionProperties";
 import { AiGenerate } from "./components/AiGenerate";
 import type { Project } from "./types/project";
 
+// Escondido até haver ANTHROPIC_API_KEY configurada no Vercel (custo por
+// chamada — só se liga quando o Kiko decidir). Ver sessions/kubata/ no vault.
+const AI_GENERATE_ENABLED = import.meta.env.VITE_ENABLE_AI_GENERATE === "true";
+
 // three.js/@react-three só carregam quando o utilizador pede a pré-visualização
 // 3D — evita meter ~1MB no bundle inicial, importante em ligações fracas.
 const Preview3D = lazy(() => import("./components/Preview3D").then((m) => ({ default: m.Preview3D })));
@@ -114,7 +118,7 @@ function App() {
 
       <div style={{ display: "flex", gap: 24, flexWrap: "wrap", alignItems: "flex-start" }}>
         <Editor2D />
-        <AiGenerate />
+        {AI_GENERATE_ENABLED && <AiGenerate />}
         {show3D && (
           <Suspense fallback={<p style={{ fontSize: 13, color: "#888" }}>A carregar 3D…</p>}>
             <Preview3D />
