@@ -1,9 +1,13 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { useProjectStore } from "./store/projectStore";
 import { Editor2D } from "./components/Editor2D";
 import { MaterialsPanel } from "./components/MaterialsPanel";
 import { DivisionProperties } from "./components/DivisionProperties";
 import type { Project } from "./types/project";
+
+// three.js/@react-three só carregam quando o utilizador pede a pré-visualização
+// 3D — evita meter ~1MB no bundle inicial, importante em ligações fracas.
+const Preview3D = lazy(() => import("./components/Preview3D").then((m) => ({ default: m.Preview3D })));
 import { getPointer, loadProject, saveProject, setPointer } from "./lib/projectSync";
 import { PROJECT_TEMPLATES } from "./lib/templates";
 import "./index.css";
@@ -22,6 +26,7 @@ function App() {
   const hydrate = useProjectStore((s) => s.hydrate);
 
   const [ready, setReady] = useState(false);
+  const [show3D, setShow3D] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -95,12 +100,24 @@ function App() {
         </span>
       </header>
 
-      <button type="button" onClick={addDivision} style={{ marginBottom: 12 }} disabled={!ready}>
-        + Adicionar divisão
-      </button>
+      <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+        <button type="button" onClick={addDivision} disabled={!ready}>
+          + Adicionar divisão
+        </button>
+        {!show3D && (
+          <button type="button" onClick={() => setShow3D(true)}>
+            Mostrar pré-visualização 3D
+          </button>
+        )}
+      </div>
 
       <div style={{ display: "flex", gap: 24, flexWrap: "wrap", alignItems: "flex-start" }}>
         <Editor2D />
+        {show3D && (
+          <Suspense fallback={<p style={{ fontSize: 13, color: "#888" }}>A carregar 3D…</p>}>
+            <Preview3D />
+          </Suspense>
+        )}
         <DivisionProperties />
         <MaterialsPanel />
       </div>
