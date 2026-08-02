@@ -3,6 +3,7 @@ import { useProjectStore } from "./store/projectStore";
 import { Editor2D } from "./components/Editor2D";
 import { MaterialsPanel } from "./components/MaterialsPanel";
 import { DivisionProperties } from "./components/DivisionProperties";
+import { AiGenerate } from "./components/AiGenerate";
 import type { Project } from "./types/project";
 
 // three.js/@react-three só carregam quando o utilizador pede a pré-visualização
@@ -113,6 +114,7 @@ function App() {
 
       <div style={{ display: "flex", gap: 24, flexWrap: "wrap", alignItems: "flex-start" }}>
         <Editor2D />
+        <AiGenerate />
         {show3D && (
           <Suspense fallback={<p style={{ fontSize: 13, color: "#888" }}>A carregar 3D…</p>}>
             <Preview3D />

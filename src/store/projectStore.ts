@@ -23,6 +23,15 @@ interface ProjectState {
   hydrate: (payload: PersistedProject) => void;
   addOpening: (divisionId: string, opening: Omit<Opening, "id">) => void;
   removeOpening: (divisionId: string, openingId: string) => void;
+  appendGeneratedDivisions: (divisions: GeneratedDivision[]) => void;
+}
+
+export interface GeneratedDivision {
+  label: string;
+  widthM: number;
+  heightM: number;
+  wallHeightM: number;
+  openings?: Omit<Opening, "id">[];
 }
 
 /** Recalcula as linhas "computed" a partir das divisões, preserva as "custom" tal como estão. */
@@ -168,4 +177,38 @@ export const useProjectStore = create<ProjectState>()((set) => ({
       return { project, materials: recalculate(project, state.materials) };
     });
   },
+
+  appendGeneratedDivisions: (generated) => {
+    set((state) => {
+      let cursorX = state.project.divisions.reduce((max, d) => Math.max(max, d.x + d.width), 0);
+      cursorX = cursorX > 0 ? cursorX + 1 : 1;
+      const newDivisions: Division[] = generated.map((g) => {
+        const division: Division = {
+          id: crypto.randomUUID(),
+          label: g.label,
+          x: cursorX,
+          y: 1,
+          width: clampDim(g.widthM),
+          height: clampDim(g.heightM),
+          wallHeightM: g.wallHeightM > 0 ? g.wallHeightM : 3,
+          blockSpecId: BLOCK_CATALOG[1].id,
+          openings: (g.openings ?? []).map((o) => ({ ...o, id: crypto.randomUUID() })),
+        };
+        cursorX += division.width + 1;
+        return division;
+      });
+      const divisions = [...state.project.divisions, ...newDivisions];
+      const project = { ...state.project, divisions };
+      return {
+        project,
+        materials: recalculate(project, state.materials),
+        selectedDivisionId: newDivisions[0]?.id ?? state.selectedDivisionId,
+      };
+    });
+  },
 }));
+
+function clampDim(n: number): number {
+  if (!Number.isFinite(n) || n <= 0) return 3;
+  return Math.min(15, Math.max(1, n));
+}
