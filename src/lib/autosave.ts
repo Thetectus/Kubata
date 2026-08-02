@@ -10,11 +10,7 @@ export function startAutosave(): void {
     if (timer) clearTimeout(timer);
     timer = setTimeout(() => {
       setPointer(state.project.id);
-      void saveProject({
-        project: state.project,
-        materials: state.materials,
-        customMaterials: state.customMaterials,
-      });
+      void saveProject({ project: state.project, materials: state.materials });
     }, DEBOUNCE_MS);
   });
 }

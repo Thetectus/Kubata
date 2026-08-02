@@ -22,7 +22,12 @@ export function wallAreaM2(d: Division): number {
   return perimeter * d.wallHeightM;
 }
 
-export function calculateMaterials(divisions: Division[]): MaterialLine[] {
+export function totalWallAreaM2(divisions: Division[]): number {
+  return divisions.reduce((sum, d) => sum + wallAreaM2(d), 0);
+}
+
+/** Materiais calculados automaticamente a partir das divisões (cimento, areia, blocos). */
+export function calculateComputedMaterials(divisions: Division[]): MaterialLine[] {
   let cimentoKg = 0;
   let areiaM3 = 0;
   const blocksBySpec = new Map<string, { spec: BlockSpec; quantity: number }>();
@@ -43,27 +48,30 @@ export function calculateMaterials(divisions: Division[]): MaterialLine[] {
 
   const lines: MaterialLine[] = [
     {
-      materialId: "cimento",
+      id: "cimento",
       name: "Cimento (saco 50kg)",
       unit: "saco",
-      quantity: round2(cimentoKg / 50),
+      source: "computed",
+      manualQuantity: round2(cimentoKg / 50),
       suggestedPrice: DEFAULT_PRICES.cimentoSaco50kg,
     },
     {
-      materialId: "areia",
+      id: "areia",
       name: "Areia",
       unit: "m3",
-      quantity: round2(areiaM3),
+      source: "computed",
+      manualQuantity: round2(areiaM3),
       suggestedPrice: DEFAULT_PRICES.areiaM3,
     },
   ];
 
   for (const { spec, quantity } of blocksBySpec.values()) {
     lines.push({
-      materialId: specKey(spec),
+      id: specKey(spec),
       name: spec.name,
       unit: "un",
-      quantity: Math.ceil(quantity),
+      source: "computed",
+      manualQuantity: Math.ceil(quantity),
       suggestedPrice: defaultPricePerUnit(spec),
     });
   }
@@ -71,8 +79,14 @@ export function calculateMaterials(divisions: Division[]): MaterialLine[] {
   return lines;
 }
 
-export function totalCost(lines: MaterialLine[]): number {
-  return lines.reduce((sum, l) => sum + l.quantity * (l.userPrice ?? l.suggestedPrice), 0);
+/** Quantidade final de uma linha: fixa, ou taxa × área total de parede do projecto. */
+export function resolveQuantity(line: MaterialLine, totalAreaM2: number): number {
+  if (line.coverageRatePerM2 !== undefined) return round2(line.coverageRatePerM2 * totalAreaM2);
+  return line.manualQuantity ?? 0;
+}
+
+export function totalCost(lines: MaterialLine[], totalAreaM2: number): number {
+  return lines.reduce((sum, l) => sum + resolveQuantity(l, totalAreaM2) * (l.userPrice ?? l.suggestedPrice), 0);
 }
 
 function round2(n: number): number {

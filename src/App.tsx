@@ -32,7 +32,7 @@ function App() {
         hydrate(loaded);
       } else {
         const state = useProjectStore.getState();
-        await saveProject({ project: state.project, materials: state.materials, customMaterials: state.customMaterials });
+        await saveProject({ project: state.project, materials: state.materials });
         setPointer(state.project.id);
       }
       if (!cancelled) setReady(true);
