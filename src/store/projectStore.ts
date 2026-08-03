@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { Division, MaterialLine, Opening, Project } from "../types/project";
+import type { Division, MaterialLine, Opening, Project, WallSide } from "../types/project";
 import { calculateComputedMaterials } from "../lib/materials";
 import { BLOCK_CATALOG } from "../lib/blocks";
 import type { PersistedProject } from "../lib/projectSync";
@@ -24,6 +24,7 @@ interface ProjectState {
   addOpening: (divisionId: string, opening: Omit<Opening, "id">) => void;
   removeOpening: (divisionId: string, openingId: string) => void;
   appendGeneratedDivisions: (divisions: GeneratedDivision[]) => void;
+  addAdjacentDivision: (divisionId: string, side: WallSide) => void;
 }
 
 export interface GeneratedDivision {
@@ -203,6 +204,38 @@ export const useProjectStore = create<ProjectState>()((set) => ({
         project,
         materials: recalculate(project, state.materials),
         selectedDivisionId: newDivisions[0]?.id ?? state.selectedDivisionId,
+      };
+    });
+  },
+  addAdjacentDivision: (divisionId, side) => {
+    set((state) => {
+      const src = state.project.divisions.find((d) => d.id === divisionId);
+      if (!src) return state;
+      let x = src.x;
+      let y = src.y;
+      if (side === "right") x = src.x + src.width;
+      if (side === "left") x = src.x - src.width;
+      if (side === "bottom") y = src.y + src.height;
+      if (side === "top") y = src.y - src.height;
+
+      const division: Division = {
+        id: crypto.randomUUID(),
+        label: `Divisão ${state.project.divisions.length + 1}`,
+        x,
+        y,
+        width: src.width,
+        height: src.height,
+        wallHeightM: src.wallHeightM,
+        blockSpecId: src.blockSpecId,
+        blockOverride: src.blockOverride,
+        openings: [],
+      };
+      const divisions = [...state.project.divisions, division];
+      const project = { ...state.project, divisions };
+      return {
+        project,
+        materials: recalculate(project, state.materials),
+        selectedDivisionId: division.id,
       };
     });
   },

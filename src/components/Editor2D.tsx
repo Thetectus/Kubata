@@ -1,17 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Stage, Layer, Rect, Text, Group } from "react-konva";
+import { Stage, Layer, Rect, Text, Group, Line, Circle } from "react-konva";
 import type Konva from "konva";
 import { useProjectStore } from "../store/projectStore";
 import { resolveBlockSpec } from "../lib/blocks";
 import { generateWallBlocks, type OpeningsBySide, type WallBlockRect } from "../lib/wallBlocks";
 import { WallBlockShape } from "./WallBlockShape";
-import type { Division, Opening } from "../types/project";
+import { snapPosition } from "../lib/snapping";
+import type { Division, Opening, WallSide } from "../types/project";
 
 const PX_PER_METER = 30;
 const STAGE_WIDTH = 640;
 const STAGE_HEIGHT = 460;
 const MIN_SCALE = 0.15;
 const MAX_SCALE = 3;
+const SNAP_THRESHOLD_PX = 8;
 const BLOCK_FILL: Record<string, string> = {
   tijolo: "#c96f3c",
   bloco: "#b7b0a3",
@@ -20,6 +22,7 @@ const OPENING_FILL: Record<Opening["type"], string> = {
   porta: "#7c4a1e",
   janela: "#8fc7e8",
 };
+const SIDE_PLUS_OFFSET = 16;
 
 function openingsBySide(division: Division): OpeningsBySide {
   const grouped: OpeningsBySide = {};
@@ -45,15 +48,30 @@ function openingMarkerRect(o: Opening, widthPx: number, heightPx: number, thickn
   }
 }
 
+function plusButtonPosition(side: WallSide, widthPx: number, heightPx: number) {
+  switch (side) {
+    case "top":
+      return { x: widthPx / 2, y: -SIDE_PLUS_OFFSET };
+    case "bottom":
+      return { x: widthPx / 2, y: heightPx + SIDE_PLUS_OFFSET };
+    case "left":
+      return { x: -SIDE_PLUS_OFFSET, y: heightPx / 2 };
+    case "right":
+      return { x: widthPx + SIDE_PLUS_OFFSET, y: heightPx / 2 };
+  }
+}
+
 export function Editor2D() {
   const divisions = useProjectStore((s) => s.project.divisions);
   const selectedDivisionId = useProjectStore((s) => s.selectedDivisionId);
   const updateDivision = useProjectStore((s) => s.updateDivision);
   const selectDivision = useProjectStore((s) => s.selectDivision);
+  const addAdjacentDivision = useProjectStore((s) => s.addAdjacentDivision);
 
   const prevBlockCounts = useRef<Map<string, number>>(new Map());
   const stageRef = useRef<Konva.Stage>(null);
   const [view, setView] = useState({ scale: 1, x: 20, y: 20 });
+  const [guides, setGuides] = useState<{ x?: number; y?: number }>({});
 
   const divisionsRender = useMemo(
     () =>
@@ -180,11 +198,27 @@ export function Editor2D() {
                 draggable
                 onClick={() => selectDivision(d.id)}
                 onTap={() => selectDivision(d.id)}
+                onDragMove={(e: Konva.KonvaEventObject<DragEvent>) => {
+                  if (e.target !== e.currentTarget) return;
+                  const others = divisions
+                    .filter((o) => o.id !== d.id)
+                    .map((o) => ({ x: o.x, y: o.y, width: o.width, height: o.height }));
+                  const thresholdM = SNAP_THRESHOLD_PX / view.scale / PX_PER_METER;
+                  const snap = snapPosition(
+                    { x: e.target.x() / PX_PER_METER, y: e.target.y() / PX_PER_METER, width: d.width, height: d.height },
+                    others,
+                    thresholdM,
+                  );
+                  e.target.position({ x: snap.x * PX_PER_METER, y: snap.y * PX_PER_METER });
+                  setGuides({ x: snap.guideX, y: snap.guideY });
+                }}
                 onDragEnd={(e: Konva.KonvaEventObject<DragEvent>) => {
+                  if (e.target !== e.currentTarget) return;
                   updateDivision(d.id, {
                     x: round1(e.target.x() / PX_PER_METER),
                     y: round1(e.target.y() / PX_PER_METER),
                   });
+                  setGuides({});
                 }}
               >
                 <Rect
@@ -231,6 +265,7 @@ export function Editor2D() {
                   padding={6}
                   width={widthPx}
                   align="center"
+                  listening={false}
                 />
 
                 {/* alça de redimensionar: canto inferior direito */}
@@ -242,6 +277,7 @@ export function Editor2D() {
                   fill="#8a5a2b"
                   draggable
                   onDragMove={(e: Konva.KonvaEventObject<DragEvent>) => {
+                    e.cancelBubble = true;
                     const newWidthPx = Math.max(1 * PX_PER_METER, e.target.x() + 8);
                     const newHeightPx = Math.max(1 * PX_PER_METER, e.target.y() + 8);
                     updateDivision(d.id, {
@@ -250,12 +286,69 @@ export function Editor2D() {
                     });
                     e.target.position({ x: newWidthPx - 8, y: newHeightPx - 8 });
                   }}
+                  onDragEnd={(e: Konva.KonvaEventObject<DragEvent>) => {
+                    e.cancelBubble = true;
+                  }}
                 />
+
+                {selected &&
+                  (["top", "right", "bottom", "left"] as WallSide[]).map((side) => {
+                    const pos = plusButtonPosition(side, widthPx, heightPx);
+                    return (
+                      <Group
+                        key={side}
+                        x={pos.x}
+                        y={pos.y}
+                        onClick={(e) => {
+                          e.cancelBubble = true;
+                          addAdjacentDivision(d.id, side);
+                        }}
+                        onTap={(e) => {
+                          e.cancelBubble = true;
+                          addAdjacentDivision(d.id, side);
+                        }}
+                        onMouseEnter={(e) => {
+                          const stage = e.target.getStage();
+                          if (stage) stage.container().style.cursor = "pointer";
+                        }}
+                        onMouseLeave={(e) => {
+                          const stage = e.target.getStage();
+                          if (stage) stage.container().style.cursor = "default";
+                        }}
+                      >
+                        <Circle radius={9} fill="#2563eb" stroke="#fff" strokeWidth={1} />
+                        <Text text="+" fontSize={14} fill="#fff" x={-4} y={-7} listening={false} />
+                      </Group>
+                    );
+                  })}
               </Group>
             );
           })}
+
+          {guides.x !== undefined && (
+            <Line
+              points={[guides.x * PX_PER_METER, -2000, guides.x * PX_PER_METER, 4000]}
+              stroke="#ff3b8d"
+              strokeWidth={1 / view.scale}
+              dash={[5, 4]}
+              listening={false}
+            />
+          )}
+          {guides.y !== undefined && (
+            <Line
+              points={[-2000, guides.y * PX_PER_METER, 4000, guides.y * PX_PER_METER]}
+              stroke="#ff3b8d"
+              strokeWidth={1 / view.scale}
+              dash={[5, 4]}
+              listening={false}
+            />
+          )}
         </Layer>
       </Stage>
+      <p style={{ fontSize: 11, color: "#888", marginTop: 4 }}>
+        Selecciona uma divisão para veres os botões "+" à volta — criam uma
+        divisão igual encostada a esse lado.
+      </p>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { useProjectStore } from "./store/projectStore";
 import { Editor2D } from "./components/Editor2D";
 import { MaterialsPanel } from "./components/MaterialsPanel";
@@ -32,6 +32,8 @@ function App() {
 
   const [ready, setReady] = useState(false);
   const [show3D, setShow3D] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const workspaceRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -53,6 +55,26 @@ function App() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    function onFullscreenChange() {
+      setIsFullscreen(Boolean(document.fullscreenElement) && document.fullscreenElement === workspaceRef.current);
+    }
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", onFullscreenChange);
+  }, []);
+
+  async function toggleWorkspaceFullscreen() {
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+      } else {
+        await workspaceRef.current?.requestFullscreen();
+      }
+    } catch {
+      // ecrã inteiro pode não ser permitido neste browser/contexto — sem efeito
+    }
+  }
 
   return (
     <div style={{ maxWidth: 1200, margin: "0 auto", padding: 24, fontFamily: "sans-serif" }}>
@@ -114,9 +136,26 @@ function App() {
             Mostrar pré-visualização 3D
           </button>
         )}
+        <button type="button" onClick={toggleWorkspaceFullscreen}>
+          {isFullscreen ? "Sair do ecrã inteiro" : "Expandir espaço de trabalho"}
+        </button>
       </div>
 
-      <div style={{ display: "flex", gap: 24, flexWrap: "wrap", alignItems: "flex-start" }}>
+      <div
+        ref={workspaceRef}
+        style={{
+          display: "flex",
+          gap: 24,
+          flexWrap: "wrap",
+          alignItems: "flex-start",
+          background: isFullscreen ? "#ffffff" : undefined,
+          padding: isFullscreen ? 24 : undefined,
+          overflow: isFullscreen ? "auto" : undefined,
+          width: isFullscreen ? "100%" : undefined,
+          height: isFullscreen ? "100%" : undefined,
+          boxSizing: "border-box",
+        }}
+      >
         <Editor2D />
         {AI_GENERATE_ENABLED && <AiGenerate />}
         {show3D && (
