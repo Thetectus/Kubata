@@ -8,14 +8,18 @@ import { instantiateTemplate, type ProjectTemplate } from "../lib/templates";
 interface ProjectState {
   project: Project;
   materials: MaterialLine[];
-  selectedDivisionId: string | null;
+  /** conjunto de divisões seleccionadas; a última clicada fica em último lugar (é a "principal") */
+  selectedDivisionIds: string[];
   selectedOpeningId: string | null;
   selectOpening: (id: string | null) => void;
-  pasteDivision: (source: Division) => void;
+  pasteDivisions: (sources: Division[]) => void;
   addDivision: () => void;
   updateDivision: (id: string, patch: Partial<Division>) => void;
   removeDivision: (id: string) => void;
-  selectDivision: (id: string | null) => void;
+  removeDivisions: (ids: string[]) => void;
+  /** selecciona só esta divisão (additive=false), ou junta/tira da selecção actual (additive=true, ex: Shift+clique) */
+  selectDivision: (id: string | null, additive?: boolean) => void;
+  selectAllDivisions: () => void;
   setUserPrice: (materialId: string, price: number | undefined) => void;
   addCustomMaterial: () => void;
   updateCustomMaterial: (id: string, patch: Partial<MaterialLine>) => void;
@@ -55,27 +59,28 @@ function emptyProject(): Project {
 export const useProjectStore = create<ProjectState>()((set) => ({
   project: emptyProject(),
   materials: [],
-  selectedDivisionId: null,
+  selectedDivisionIds: [],
   selectedOpeningId: null,
 
   selectOpening: (id) => set({ selectedOpeningId: id }),
 
-  pasteDivision: (source) => {
+  pasteDivisions: (sources) => {
+    if (sources.length === 0) return;
     set((state) => {
-      const division: Division = {
+      const minX = Math.min(...sources.map((s) => s.x));
+      const newDivisions: Division[] = sources.map((source) => ({
         ...source,
         id: crypto.randomUUID(),
         label: `${source.label} (cópia)`,
-        x: source.x + source.width + 1,
-        y: source.y,
+        x: source.x - minX + Math.max(...sources.map((s) => s.x + s.width)) + 1,
         openings: source.openings.map((o) => ({ ...o, id: crypto.randomUUID() })),
-      };
-      const divisions = [...state.project.divisions, division];
+      }));
+      const divisions = [...state.project.divisions, ...newDivisions];
       const project = { ...state.project, divisions };
       return {
         project,
         materials: recalculate(project, state.materials),
-        selectedDivisionId: division.id,
+        selectedDivisionIds: newDivisions.map((d) => d.id),
       };
     });
   },
@@ -98,7 +103,7 @@ export const useProjectStore = create<ProjectState>()((set) => ({
       return {
         project,
         materials: recalculate(project, state.materials),
-        selectedDivisionId: division.id,
+        selectedDivisionIds: [division.id],
       };
     });
   },
@@ -118,12 +123,41 @@ export const useProjectStore = create<ProjectState>()((set) => ({
       return {
         project,
         materials: recalculate(project, state.materials),
-        selectedDivisionId: state.selectedDivisionId === id ? null : state.selectedDivisionId,
+        selectedDivisionIds: state.selectedDivisionIds.filter((sid) => sid !== id),
       };
     });
   },
 
-  selectDivision: (id) => set({ selectedDivisionId: id, selectedOpeningId: null }),
+  removeDivisions: (ids) => {
+    set((state) => {
+      const idSet = new Set(ids);
+      const divisions = state.project.divisions.filter((d) => !idSet.has(d.id));
+      const project = { ...state.project, divisions };
+      return {
+        project,
+        materials: recalculate(project, state.materials),
+        selectedDivisionIds: state.selectedDivisionIds.filter((sid) => !idSet.has(sid)),
+      };
+    });
+  },
+
+  selectDivision: (id, additive = false) => {
+    set((state) => {
+      if (id === null) return { selectedDivisionIds: [], selectedOpeningId: null };
+      if (!additive) return { selectedDivisionIds: [id], selectedOpeningId: null };
+      const without = state.selectedDivisionIds.filter((sid) => sid !== id);
+      const selectedDivisionIds =
+        without.length === state.selectedDivisionIds.length ? [...state.selectedDivisionIds, id] : without;
+      return { selectedDivisionIds, selectedOpeningId: null };
+    });
+  },
+
+  selectAllDivisions: () => {
+    set((state) => ({
+      selectedDivisionIds: state.project.divisions.map((d) => d.id),
+      selectedOpeningId: null,
+    }));
+  },
 
   setUserPrice: (materialId, price) => {
     set((state) => ({
@@ -156,7 +190,7 @@ export const useProjectStore = create<ProjectState>()((set) => ({
   newProject: (name, kind) => {
     set(() => {
       const project: Project = { id: crypto.randomUUID(), name, kind, divisions: [] };
-      return { project, materials: [], selectedDivisionId: null, selectedOpeningId: null };
+      return { project, materials: [], selectedDivisionIds: [], selectedOpeningId: null };
     });
   },
 
@@ -166,7 +200,7 @@ export const useProjectStore = create<ProjectState>()((set) => ({
       return {
         project,
         materials: recalculate(project, []),
-        selectedDivisionId: project.divisions[0]?.id ?? null,
+        selectedDivisionIds: project.divisions[0] ? [project.divisions[0].id] : [],
       };
     });
   },
@@ -179,7 +213,7 @@ export const useProjectStore = create<ProjectState>()((set) => ({
     set(() => ({
       project: payload.project,
       materials: payload.materials,
-      selectedDivisionId: null,
+      selectedDivisionIds: [],
       selectedOpeningId: null,
     }));
   },
@@ -234,7 +268,7 @@ export const useProjectStore = create<ProjectState>()((set) => ({
       return {
         project,
         materials: recalculate(project, state.materials),
-        selectedDivisionId: newDivisions[0]?.id ?? state.selectedDivisionId,
+        selectedDivisionIds: newDivisions[0] ? [newDivisions[0].id] : state.selectedDivisionIds,
       };
     });
   },
@@ -266,7 +300,7 @@ export const useProjectStore = create<ProjectState>()((set) => ({
       return {
         project,
         materials: recalculate(project, state.materials),
-        selectedDivisionId: division.id,
+        selectedDivisionIds: [division.id],
       };
     });
   },

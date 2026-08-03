@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useProjectStore } from "../store/projectStore";
 import { resolveQuantity, totalCost, totalWallAreaM2 } from "../lib/materials";
+import { EyeIcon, EyeOffIcon } from "./icons";
 import type { MaterialUnit } from "../types/project";
 
 const UNITS: MaterialUnit[] = ["un", "saco", "m2", "m3", "kg", "L"];
@@ -25,8 +26,14 @@ export function MaterialsPanel() {
     <div style={{ minWidth: 280, maxWidth: "100%" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
         <h2 style={{ fontSize: 16, margin: 0 }}>Materiais e custo</h2>
-        <button type="button" onClick={() => setCollapsed((c) => !c)} style={{ fontSize: 12 }}>
-          {collapsed ? "Expandir ▾" : "Comprimir ▴"}
+        <button
+          type="button"
+          onClick={() => setCollapsed((c) => !c)}
+          title={collapsed ? "Expandir" : "Comprimir"}
+          aria-label={collapsed ? "Expandir" : "Comprimir"}
+          style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12 }}
+        >
+          {collapsed ? <EyeOffIcon /> : <EyeIcon />}
         </button>
       </div>
       <p style={{ fontWeight: 600, margin: "8px 0" }}>Custo total estimado: {formatKz(grandTotal)}</p>

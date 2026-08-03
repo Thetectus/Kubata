@@ -9,10 +9,11 @@ const TYPE_LABELS: Record<OpeningType, string> = { porta: "Porta", janela: "Jane
 
 export function DivisionProperties() {
   const divisions = useProjectStore((s) => s.project.divisions);
-  const selectedDivisionId = useProjectStore((s) => s.selectedDivisionId);
+  const selectedDivisionIds = useProjectStore((s) => s.selectedDivisionIds);
   const selectedOpeningId = useProjectStore((s) => s.selectedOpeningId);
   const updateDivision = useProjectStore((s) => s.updateDivision);
   const removeDivision = useProjectStore((s) => s.removeDivision);
+  const removeDivisions = useProjectStore((s) => s.removeDivisions);
   const addOpening = useProjectStore((s) => s.addOpening);
   const removeOpening = useProjectStore((s) => s.removeOpening);
   const selectOpening = useProjectStore((s) => s.selectOpening);
@@ -22,13 +23,33 @@ export function DivisionProperties() {
   const [newOffset, setNewOffset] = useState(0.3);
   const [newWidth, setNewWidth] = useState(0.9);
 
-  const division = divisions.find((d) => d.id === selectedDivisionId);
+  const division = divisions.find((d) => d.id === selectedDivisionIds[0]);
 
   function toggleOpenWall(side: WallSide) {
     if (!division) return;
     const current = division.openWalls ?? [];
     const openWalls = current.includes(side) ? current.filter((s) => s !== side) : [...current, side];
     updateDivision(division.id, { openWalls });
+  }
+
+  if (selectedDivisionIds.length > 1) {
+    return (
+      <div style={{ minWidth: 260, fontSize: 14 }}>
+        <h2 style={{ fontSize: 16, marginBottom: 8 }}>{selectedDivisionIds.length} divisões seleccionadas</h2>
+        <p style={{ fontSize: 12, color: "#888" }}>
+          Ctrl+C / Ctrl+V copia e cola o grupo todo de uma vez. Para editar
+          propriedades individuais, selecciona só uma divisão (clica sem
+          Shift).
+        </p>
+        <button
+          type="button"
+          onClick={() => removeDivisions(selectedDivisionIds)}
+          style={{ marginTop: 8, color: "#b91c1c" }}
+        >
+          Remover as {selectedDivisionIds.length} divisões
+        </button>
+      </div>
+    );
   }
 
   if (!division) {
@@ -45,8 +66,17 @@ export function DivisionProperties() {
 
   return (
     <div style={{ minWidth: 260, fontSize: 14 }}>
-      <h2 style={{ fontSize: 16, marginBottom: 8 }}>Propriedades — {division.label}</h2>
+      <h2 style={{ fontSize: 16, marginBottom: 8 }}>Propriedades</h2>
 
+      <label style={row}>
+        Nome
+        <input
+          type="text"
+          value={division.label}
+          onChange={(e) => updateDivision(division.id, { label: e.target.value })}
+          style={{ width: 140 }}
+        />
+      </label>
       <label style={row}>
         Largura (m)
         <input
