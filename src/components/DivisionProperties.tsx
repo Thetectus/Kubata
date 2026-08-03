@@ -5,7 +5,7 @@ import { WALL_SIDES, sideLengthM } from "../lib/openings";
 import type { OpeningType, WallSide } from "../types/project";
 
 const SIDE_LABELS: Record<WallSide, string> = { top: "cima", right: "direita", bottom: "baixo", left: "esquerda" };
-const TYPE_LABELS: Record<OpeningType, string> = { porta: "Porta", janela: "Janela" };
+const TYPE_LABELS: Record<OpeningType, string> = { porta: "Porta", janela: "Janela", balcao: "Balcão" };
 
 export function DivisionProperties() {
   const divisions = useProjectStore((s) => s.project.divisions);
@@ -21,6 +21,14 @@ export function DivisionProperties() {
   const [newWidth, setNewWidth] = useState(0.9);
 
   const division = divisions.find((d) => d.id === selectedDivisionId);
+
+  function toggleOpenWall(side: WallSide) {
+    if (!division) return;
+    const current = division.openWalls ?? [];
+    const openWalls = current.includes(side) ? current.filter((s) => s !== side) : [...current, side];
+    updateDivision(division.id, { openWalls });
+  }
+
   if (!division) {
     return (
       <div style={{ minWidth: 260, color: "#888", fontSize: 14 }}>
@@ -142,7 +150,28 @@ export function DivisionProperties() {
         </button>
       )}
 
-      <h3 style={{ fontSize: 14, margin: "12px 0 6px" }}>Portas e janelas</h3>
+      <h3 style={{ fontSize: 14, margin: "12px 0 6px" }}>Paredes</h3>
+      <p style={{ fontSize: 12, color: "#888", margin: "0 0 4px" }}>
+        Remove por completo a parede de um lado (ex: espaço aberto, acesso a
+        varanda) — deixa de contar para o cálculo de materiais.
+      </p>
+      <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 8 }}>
+        {WALL_SIDES.map((s) => {
+          const isOpen = (division.openWalls ?? []).includes(s);
+          return (
+            <button
+              key={s}
+              type="button"
+              onClick={() => toggleOpenWall(s)}
+              style={{ fontSize: 12, background: isOpen ? "#fde68a" : undefined }}
+            >
+              {SIDE_LABELS[s]}: {isOpen ? "sem parede" : "com parede"}
+            </button>
+          );
+        })}
+      </div>
+
+      <h3 style={{ fontSize: 14, margin: "12px 0 6px" }}>Portas, janelas e balcões</h3>
       {division.openings.length === 0 && (
         <p style={{ fontSize: 12, color: "#888" }}>Nenhuma abertura adicionada.</p>
       )}
@@ -161,6 +190,7 @@ export function DivisionProperties() {
         <select value={newType} onChange={(e) => setNewType(e.target.value as OpeningType)}>
           <option value="porta">Porta</option>
           <option value="janela">Janela</option>
+          <option value="balcao">Balcão</option>
         </select>
         <select value={newSide} onChange={(e) => setNewSide(e.target.value as WallSide)}>
           {WALL_SIDES.map((s) => (

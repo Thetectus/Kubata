@@ -4,6 +4,7 @@ import { Editor2D } from "./components/Editor2D";
 import { MaterialsPanel } from "./components/MaterialsPanel";
 import { DivisionProperties } from "./components/DivisionProperties";
 import { AiGenerate } from "./components/AiGenerate";
+import { LoadingScreen } from "./components/LoadingScreen";
 import type { Project } from "./types/project";
 
 // Escondido até haver ANTHROPIC_API_KEY configurada no Vercel (custo por
@@ -34,6 +35,18 @@ function App() {
   const [show3D, setShow3D] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const workspaceRef = useRef<HTMLDivElement>(null);
+
+  const [splashVisible, setSplashVisible] = useState(true);
+  const [splashFadingOut, setSplashFadingOut] = useState(false);
+
+  useEffect(() => {
+    const fadeTimer = setTimeout(() => setSplashFadingOut(true), 4200);
+    const removeTimer = setTimeout(() => setSplashVisible(false), 4700);
+    return () => {
+      clearTimeout(fadeTimer);
+      clearTimeout(removeTimer);
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -78,6 +91,7 @@ function App() {
 
   return (
     <div style={{ maxWidth: 1200, margin: "0 auto", padding: 24, fontFamily: "sans-serif" }}>
+      {splashVisible && <LoadingScreen fadingOut={splashFadingOut} />}
       <header style={{ marginBottom: 16, display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
         <div>
           <h1 style={{ margin: 0 }}>Kubata</h1>
@@ -146,7 +160,7 @@ function App() {
         style={{
           display: "flex",
           gap: 24,
-          flexWrap: "wrap",
+          flexWrap: isFullscreen ? "nowrap" : "wrap",
           alignItems: "flex-start",
           background: isFullscreen ? "#ffffff" : undefined,
           padding: isFullscreen ? 24 : undefined,
@@ -156,15 +170,25 @@ function App() {
           boxSizing: "border-box",
         }}
       >
-        <Editor2D />
-        {AI_GENERATE_ENABLED && <AiGenerate />}
-        {show3D && (
-          <Suspense fallback={<p style={{ fontSize: 13, color: "#888" }}>A carregar 3D…</p>}>
-            <Preview3D />
-          </Suspense>
+        <Editor2D expanded={isFullscreen} />
+        {isFullscreen ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 20, width: 380, flex: "0 0 380px" }}>
+            <DivisionProperties />
+            {AI_GENERATE_ENABLED && <AiGenerate />}
+            <MaterialsPanel />
+          </div>
+        ) : (
+          <>
+            {AI_GENERATE_ENABLED && <AiGenerate />}
+            {show3D && (
+              <Suspense fallback={<p style={{ fontSize: 13, color: "#888" }}>A carregar 3D…</p>}>
+                <Preview3D />
+              </Suspense>
+            )}
+            <DivisionProperties />
+            <MaterialsPanel />
+          </>
         )}
-        <DivisionProperties />
-        <MaterialsPanel />
       </div>
     </div>
   );

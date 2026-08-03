@@ -31,15 +31,18 @@ export function generateWallBlocks(
   spec: BlockSpec,
   pxPerMeter: number,
   openings: OpeningsBySide = {},
+  openWalls: WallSide[] = [],
 ): WallBlockRect[] {
   const thickness = Math.max(4, (spec.thicknessCm / 100) * pxPerMeter);
   const blockLen = Math.max(6, (spec.lengthCm / 100) * pxPerMeter);
   const blocks: WallBlockRect[] = [];
+  const open = new Set(openWalls);
 
-  tileRow(blocks, "top", 0, 0, widthPx, thickness, blockLen, openings.top);
-  tileRow(blocks, "bottom", 0, heightPx - thickness, widthPx, thickness, blockLen, openings.bottom);
-  tileCol(blocks, "left", 0, thickness, heightPx - 2 * thickness, thickness, blockLen, openings.left);
-  tileCol(blocks, "right", widthPx - thickness, thickness, heightPx - 2 * thickness, thickness, blockLen, openings.right);
+  if (!open.has("top")) tileRow(blocks, "top", 0, 0, widthPx, thickness, blockLen, openings.top);
+  if (!open.has("bottom")) tileRow(blocks, "bottom", 0, heightPx - thickness, widthPx, thickness, blockLen, openings.bottom);
+  if (!open.has("left")) tileCol(blocks, "left", 0, thickness, heightPx - 2 * thickness, thickness, blockLen, openings.left);
+  if (!open.has("right"))
+    tileCol(blocks, "right", widthPx - thickness, thickness, heightPx - 2 * thickness, thickness, blockLen, openings.right);
 
   return blocks;
 }

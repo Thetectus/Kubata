@@ -13,7 +13,9 @@ export interface WallSegment3D {
  * de bloco a bloco, só para a maquete 3D. */
 export function wallSegments3D(division: Division): WallSegment3D[] {
   const segments: WallSegment3D[] = [];
+  const open = new Set(division.openWalls ?? []);
   for (const side of WALL_SIDES) {
+    if (open.has(side)) continue;
     const total = sideLengthM(division, side);
     const ranges = division.openings
       .filter((o) => o.side === side)

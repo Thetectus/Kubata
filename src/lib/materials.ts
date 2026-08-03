@@ -1,6 +1,6 @@
 import type { Division, MaterialLine } from "../types/project";
 import { blocksPerM2, defaultPricePerUnit, resolveBlockSpec, specKey, type BlockSpec } from "./blocks";
-import { totalOpeningsAreaM2 } from "./openings";
+import { openWallsAreaM2, totalOpeningsAreaM2 } from "./openings";
 
 /**
  * Coeficientes de argamassa por m² de parede (regras de dimensionamento
@@ -21,7 +21,7 @@ export const DEFAULT_PRICES = {
 export function wallAreaM2(d: Division): number {
   const perimeter = 2 * (d.width + d.height);
   const grossArea = perimeter * d.wallHeightM;
-  return Math.max(0, grossArea - totalOpeningsAreaM2(d));
+  return Math.max(0, grossArea - totalOpeningsAreaM2(d) - openWallsAreaM2(d));
 }
 
 export function totalWallAreaM2(divisions: Division[]): number {

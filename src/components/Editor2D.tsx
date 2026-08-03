@@ -9,11 +9,12 @@ import { snapPosition } from "../lib/snapping";
 import type { Division, Opening, WallSide } from "../types/project";
 
 const PX_PER_METER = 30;
-const STAGE_WIDTH = 640;
-const STAGE_HEIGHT = 460;
+const BASE_STAGE_WIDTH = 640;
+const BASE_STAGE_HEIGHT = 460;
 const MIN_SCALE = 0.15;
 const MAX_SCALE = 3;
 const SNAP_THRESHOLD_PX = 8;
+const NOT_SELECTED_OPACITY = 0.32;
 const BLOCK_FILL: Record<string, string> = {
   tijolo: "#c96f3c",
   bloco: "#b7b0a3",
@@ -21,8 +22,14 @@ const BLOCK_FILL: Record<string, string> = {
 const OPENING_FILL: Record<Opening["type"], string> = {
   porta: "#7c4a1e",
   janela: "#8fc7e8",
+  balcao: "#d9a441",
 };
 const SIDE_PLUS_OFFSET = 16;
+
+interface Editor2DProps {
+  /** Quando true (ecrã inteiro), o canvas ocupa o espaço disponível em vez do tamanho fixo. */
+  expanded?: boolean;
+}
 
 function openingsBySide(division: Division): OpeningsBySide {
   const grouped: OpeningsBySide = {};
@@ -61,7 +68,7 @@ function plusButtonPosition(side: WallSide, widthPx: number, heightPx: number) {
   }
 }
 
-export function Editor2D() {
+export function Editor2D({ expanded = false }: Editor2DProps = {}) {
   const divisions = useProjectStore((s) => s.project.divisions);
   const selectedDivisionId = useProjectStore((s) => s.selectedDivisionId);
   const updateDivision = useProjectStore((s) => s.updateDivision);
@@ -70,8 +77,27 @@ export function Editor2D() {
 
   const prevBlockCounts = useRef<Map<string, number>>(new Map());
   const stageRef = useRef<Konva.Stage>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const [view, setView] = useState({ scale: 1, x: 20, y: 20 });
   const [guides, setGuides] = useState<{ x?: number; y?: number }>({});
+  const [stageSize, setStageSize] = useState({ width: BASE_STAGE_WIDTH, height: BASE_STAGE_HEIGHT });
+  const STAGE_WIDTH = stageSize.width;
+  const STAGE_HEIGHT = stageSize.height;
+
+  useEffect(() => {
+    if (!expanded) {
+      setStageSize({ width: BASE_STAGE_WIDTH, height: BASE_STAGE_HEIGHT });
+      return;
+    }
+    function updateSize() {
+      const width = Math.max(BASE_STAGE_WIDTH, (containerRef.current?.clientWidth ?? BASE_STAGE_WIDTH) - 4);
+      const height = Math.max(BASE_STAGE_HEIGHT, window.innerHeight - 260);
+      setStageSize({ width, height });
+    }
+    updateSize();
+    window.addEventListener("resize", updateSize);
+    return () => window.removeEventListener("resize", updateSize);
+  }, [expanded]);
 
   const divisionsRender = useMemo(
     () =>
@@ -79,7 +105,7 @@ export function Editor2D() {
         const spec = resolveBlockSpec(d.blockSpecId, d.blockOverride);
         const widthPx = d.width * PX_PER_METER;
         const heightPx = d.height * PX_PER_METER;
-        const blocks = generateWallBlocks(widthPx, heightPx, spec, PX_PER_METER, openingsBySide(d));
+        const blocks = generateWallBlocks(widthPx, heightPx, spec, PX_PER_METER, openingsBySide(d), d.openWalls);
         const thicknessPx = Math.max(4, (spec.thicknessCm / 100) * PX_PER_METER);
         return { division: d, spec, widthPx, heightPx, blocks, thicknessPx };
       }),
@@ -154,7 +180,7 @@ export function Editor2D() {
   }
 
   return (
-    <div>
+    <div ref={containerRef} style={{ flex: expanded ? "1 1 auto" : undefined, minWidth: 0 }}>
       <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
         <button type="button" onClick={() => zoomBy(1.2)} title="Aproximar">
           +
@@ -189,12 +215,14 @@ export function Editor2D() {
           {divisionsRender.map(({ division: d, spec, widthPx, heightPx, blocks, thicknessPx }) => {
             const prevCount = prevBlockCounts.current.get(d.id) ?? 0;
             const selected = d.id === selectedDivisionId;
+            const dimmed = selectedDivisionId !== null && !selected;
 
             return (
               <Group
                 key={d.id}
                 x={d.x * PX_PER_METER}
                 y={d.y * PX_PER_METER}
+                opacity={dimmed ? NOT_SELECTED_OPACITY : 1}
                 draggable
                 onClick={() => selectDivision(d.id)}
                 onTap={() => selectDivision(d.id)}

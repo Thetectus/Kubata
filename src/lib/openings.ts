@@ -5,6 +5,7 @@ import type { Division, Opening, OpeningType, WallSide } from "../types/project"
 export const DEFAULT_OPENING_HEIGHT_M: Record<OpeningType, number> = {
   porta: 2.1,
   janela: 1.2,
+  balcao: 1.0,
 };
 
 export const WALL_SIDES: WallSide[] = ["top", "right", "bottom", "left"];
@@ -19,4 +20,10 @@ export function openingAreaM2(opening: Opening): number {
 
 export function totalOpeningsAreaM2(division: Division): number {
   return division.openings.reduce((sum, o) => sum + openingAreaM2(o), 0);
+}
+
+/** Área das paredes removidas por completo (lados marcados como abertos). */
+export function openWallsAreaM2(division: Division): number {
+  const sides = division.openWalls ?? [];
+  return sides.reduce((sum, side) => sum + sideLengthM(division, side) * division.wallHeightM, 0);
 }
