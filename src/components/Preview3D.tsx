@@ -4,6 +4,8 @@ import { OrbitControls } from "@react-three/drei";
 import { useProjectStore } from "../store/projectStore";
 import { resolveBlockSpec } from "../lib/blocks";
 import { wallSegments3D } from "../lib/wallSegments3d";
+import { computeHiddenSegments, hiddenSegmentsForDivision, type HiddenSegment } from "../lib/adjacency";
+import { LoadingScreen } from "./LoadingScreen";
 import type { Division } from "../types/project";
 
 const CATEGORY_COLOR: Record<string, string> = {
@@ -18,11 +20,11 @@ const SIZE_DIMENSIONS: Record<Exclude<PreviewSize, "full">, { width: number; hei
   medium: { width: 760, height: 560 },
 };
 
-function DivisionWalls({ division }: { division: Division }) {
+function DivisionWalls({ division, hidden }: { division: Division; hidden: HiddenSegment[] }) {
   const spec = resolveBlockSpec(division.blockSpecId, division.blockOverride);
   const thickness = spec.thicknessCm / 100;
   const color = division.wallColor ?? CATEGORY_COLOR[spec.category];
-  const segments = wallSegments3D(division);
+  const segments = wallSegments3D(division, hidden);
 
   return (
     <group>
@@ -49,8 +51,9 @@ function DivisionWalls({ division }: { division: Division }) {
 }
 
 /** Maquete 3D bastante simples: extrude as paredes já desenhadas no
- * editor 2D (com vãos onde há portas/janelas). Sem texturas nem
- * mobiliário — só para dar noção volumétrica do espaço.
+ * editor 2D (com vãos onde há portas/janelas, e sem duplicar paredes
+ * partilhadas entre divisões encostadas). Sem texturas nem mobiliário —
+ * só para dar noção volumétrica do espaço.
  *
  * Suporta 3 tamanhos (tipo YouTube): normal, médio (dentro da página) e
  * ecrã inteiro (Fullscreen API real, para apresentações). */
@@ -70,16 +73,14 @@ export function Preview3D() {
 
   async function goFullscreen() {
     setPreparingFull(true);
-    // pequena pausa deliberada para a transição não parecer um "corte" abrupto
-    await new Promise((r) => setTimeout(r, 900));
     try {
       await containerRef.current?.requestFullscreen();
       setSize("full");
     } catch {
       setSize("medium");
-    } finally {
-      setPreparingFull(false);
     }
+    // ecrã de carregamento com a marca, breve, antes de revelar a vista cheia
+    setTimeout(() => setPreparingFull(false), 3800);
   }
 
   function exitFullscreen() {
@@ -95,6 +96,7 @@ export function Preview3D() {
     : { x: 0, z: 0 };
 
   const dims = size === "full" ? null : SIZE_DIMENSIONS[size];
+  const hidden = computeHiddenSegments(divisions);
 
   return (
     <div style={{ minWidth: 340 }}>
@@ -108,7 +110,7 @@ export function Preview3D() {
             Médio
           </button>
           <button type="button" onClick={goFullscreen} disabled={preparingFull} title="Ecrã inteiro (para apresentar)">
-            {preparingFull ? "A preparar…" : "Ecrã inteiro"}
+            Ecrã inteiro
           </button>
         </div>
       </div>
@@ -124,6 +126,7 @@ export function Preview3D() {
           position: "relative",
         }}
       >
+        {preparingFull && <LoadingScreen fadingOut={false} />}
         {size === "full" && (
           <button
             type="button"
@@ -141,7 +144,7 @@ export function Preview3D() {
             <meshStandardMaterial color="#eee7d8" />
           </mesh>
           {divisions.map((d) => (
-            <DivisionWalls key={d.id} division={d} />
+            <DivisionWalls key={d.id} division={d} hidden={hiddenSegmentsForDivision(hidden, d.id)} />
           ))}
           <OrbitControls target={[center.x, 1.5, center.z]} />
         </Canvas>

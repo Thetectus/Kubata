@@ -10,10 +10,12 @@ const TYPE_LABELS: Record<OpeningType, string> = { porta: "Porta", janela: "Jane
 export function DivisionProperties() {
   const divisions = useProjectStore((s) => s.project.divisions);
   const selectedDivisionId = useProjectStore((s) => s.selectedDivisionId);
+  const selectedOpeningId = useProjectStore((s) => s.selectedOpeningId);
   const updateDivision = useProjectStore((s) => s.updateDivision);
   const removeDivision = useProjectStore((s) => s.removeDivision);
   const addOpening = useProjectStore((s) => s.addOpening);
   const removeOpening = useProjectStore((s) => s.removeOpening);
+  const selectOpening = useProjectStore((s) => s.selectOpening);
 
   const [newSide, setNewSide] = useState<WallSide>("bottom");
   const [newType, setNewType] = useState<OpeningType>("porta");
@@ -175,16 +177,45 @@ export function DivisionProperties() {
       {division.openings.length === 0 && (
         <p style={{ fontSize: 12, color: "#888" }}>Nenhuma abertura adicionada.</p>
       )}
-      {division.openings.map((o) => (
-        <div key={o.id} style={{ ...row, fontSize: 12 }}>
-          <span>
-            {TYPE_LABELS[o.type]} — lado {SIDE_LABELS[o.side]}, {o.widthM}m (a {o.offsetM}m do canto)
-          </span>
-          <button type="button" onClick={() => removeOpening(division.id, o.id)} aria-label="Remover abertura">
-            ✕
-          </button>
-        </div>
-      ))}
+      {division.openings.length > 0 && (
+        <p style={{ fontSize: 11, color: "#888", margin: "0 0 4px" }}>
+          Clica num item para o destacar no desenho.
+        </p>
+      )}
+      <div style={{ marginBottom: 6 }}>
+        {division.openings.map((o) => {
+          const isSelected = o.id === selectedOpeningId;
+          return (
+            <div
+              key={o.id}
+              onClick={() => selectOpening(isSelected ? null : o.id)}
+              style={{
+                ...row,
+                fontSize: 12,
+                cursor: "pointer",
+                padding: "4px 6px",
+                borderRadius: 4,
+                background: isSelected ? "#fde3ef" : undefined,
+                border: isSelected ? "1px solid #ff3b8d" : "1px solid transparent",
+              }}
+            >
+              <span>
+                {TYPE_LABELS[o.type]} — lado {SIDE_LABELS[o.side]}, {o.widthM}m (a {o.offsetM}m do canto)
+              </span>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  removeOpening(division.id, o.id);
+                }}
+                aria-label="Remover abertura"
+              >
+                ✕
+              </button>
+            </div>
+          );
+        })}
+      </div>
 
       <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center", marginTop: 6 }}>
         <select value={newType} onChange={(e) => setNewType(e.target.value as OpeningType)}>

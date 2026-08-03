@@ -1,6 +1,7 @@
 import type { Division, MaterialLine } from "../types/project";
 import { blocksPerM2, defaultPricePerUnit, resolveBlockSpec, specKey, type BlockSpec } from "./blocks";
 import { openWallsAreaM2, totalOpeningsAreaM2 } from "./openings";
+import { computeHiddenSegments, hiddenSegmentsForDivision } from "./adjacency";
 
 /**
  * Coeficientes de argamassa por m² de parede (regras de dimensionamento
@@ -18,14 +19,21 @@ export const DEFAULT_PRICES = {
   areiaM3: 12000,
 } as const;
 
-export function wallAreaM2(d: Division): number {
+/** Área de parede de uma divisão, descontando aberturas, lados sem parede,
+ * e o troço partilhado com uma divisão vizinha encostada (para não contar
+ * a mesma parede duas vezes). */
+export function wallAreaM2(d: Division, sharedWithNeighboursM = 0): number {
   const perimeter = 2 * (d.width + d.height);
   const grossArea = perimeter * d.wallHeightM;
-  return Math.max(0, grossArea - totalOpeningsAreaM2(d) - openWallsAreaM2(d));
+  return Math.max(0, grossArea - totalOpeningsAreaM2(d) - openWallsAreaM2(d) - sharedWithNeighboursM * d.wallHeightM);
 }
 
 export function totalWallAreaM2(divisions: Division[]): number {
-  return divisions.reduce((sum, d) => sum + wallAreaM2(d), 0);
+  const hidden = computeHiddenSegments(divisions);
+  return divisions.reduce((sum, d) => {
+    const sharedM = hiddenSegmentsForDivision(hidden, d.id).reduce((s, h) => s + h.lengthM, 0);
+    return sum + wallAreaM2(d, sharedM);
+  }, 0);
 }
 
 /** Materiais calculados automaticamente a partir das divisões (cimento, areia, blocos). */
@@ -33,9 +41,11 @@ export function calculateComputedMaterials(divisions: Division[]): MaterialLine[
   let cimentoKg = 0;
   let areiaM3 = 0;
   const blocksBySpec = new Map<string, { spec: BlockSpec; quantity: number }>();
+  const hidden = computeHiddenSegments(divisions);
 
   for (const d of divisions) {
-    const area = wallAreaM2(d);
+    const sharedM = hiddenSegmentsForDivision(hidden, d.id).reduce((s, h) => s + h.lengthM, 0);
+    const area = wallAreaM2(d, sharedM);
     const spec = resolveBlockSpec(d.blockSpecId, d.blockOverride);
     const mortar = MORTAR_COEFFICIENTS[spec.category];
     cimentoKg += area * mortar.cimentoKgPorM2;

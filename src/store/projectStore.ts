@@ -9,6 +9,9 @@ interface ProjectState {
   project: Project;
   materials: MaterialLine[];
   selectedDivisionId: string | null;
+  selectedOpeningId: string | null;
+  selectOpening: (id: string | null) => void;
+  pasteDivision: (source: Division) => void;
   addDivision: () => void;
   updateDivision: (id: string, patch: Partial<Division>) => void;
   removeDivision: (id: string) => void;
@@ -53,6 +56,29 @@ export const useProjectStore = create<ProjectState>()((set) => ({
   project: emptyProject(),
   materials: [],
   selectedDivisionId: null,
+  selectedOpeningId: null,
+
+  selectOpening: (id) => set({ selectedOpeningId: id }),
+
+  pasteDivision: (source) => {
+    set((state) => {
+      const division: Division = {
+        ...source,
+        id: crypto.randomUUID(),
+        label: `${source.label} (cópia)`,
+        x: source.x + source.width + 1,
+        y: source.y,
+        openings: source.openings.map((o) => ({ ...o, id: crypto.randomUUID() })),
+      };
+      const divisions = [...state.project.divisions, division];
+      const project = { ...state.project, divisions };
+      return {
+        project,
+        materials: recalculate(project, state.materials),
+        selectedDivisionId: division.id,
+      };
+    });
+  },
 
   addDivision: () => {
     set((state) => {
@@ -97,7 +123,7 @@ export const useProjectStore = create<ProjectState>()((set) => ({
     });
   },
 
-  selectDivision: (id) => set({ selectedDivisionId: id }),
+  selectDivision: (id) => set({ selectedDivisionId: id, selectedOpeningId: null }),
 
   setUserPrice: (materialId, price) => {
     set((state) => ({
@@ -130,7 +156,7 @@ export const useProjectStore = create<ProjectState>()((set) => ({
   newProject: (name, kind) => {
     set(() => {
       const project: Project = { id: crypto.randomUUID(), name, kind, divisions: [] };
-      return { project, materials: [], selectedDivisionId: null };
+      return { project, materials: [], selectedDivisionId: null, selectedOpeningId: null };
     });
   },
 
@@ -154,6 +180,7 @@ export const useProjectStore = create<ProjectState>()((set) => ({
       project: payload.project,
       materials: payload.materials,
       selectedDivisionId: null,
+      selectedOpeningId: null,
     }));
   },
 
@@ -175,7 +202,11 @@ export const useProjectStore = create<ProjectState>()((set) => ({
         d.id === divisionId ? { ...d, openings: d.openings.filter((o) => o.id !== openingId) } : d,
       );
       const project = { ...state.project, divisions };
-      return { project, materials: recalculate(project, state.materials) };
+      return {
+        project,
+        materials: recalculate(project, state.materials),
+        selectedOpeningId: state.selectedOpeningId === openingId ? null : state.selectedOpeningId,
+      };
     });
   },
 

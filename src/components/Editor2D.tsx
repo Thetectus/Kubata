@@ -6,6 +6,7 @@ import { resolveBlockSpec } from "../lib/blocks";
 import { generateWallBlocks, type OpeningsBySide, type WallBlockRect } from "../lib/wallBlocks";
 import { WallBlockShape } from "./WallBlockShape";
 import { snapPosition } from "../lib/snapping";
+import { computeHiddenSegments, hiddenSegmentsForDivision, type HiddenSegment } from "../lib/adjacency";
 import type { Division, Opening, WallSide } from "../types/project";
 
 const PX_PER_METER = 30;
@@ -31,11 +32,17 @@ interface Editor2DProps {
   expanded?: boolean;
 }
 
-function openingsBySide(division: Division): OpeningsBySide {
+function openingsBySide(division: Division, hidden: HiddenSegment[]): OpeningsBySide {
   const grouped: OpeningsBySide = {};
   for (const o of division.openings) {
     const range = { offsetPx: o.offsetM * PX_PER_METER, widthPx: o.widthM * PX_PER_METER };
     (grouped[o.side] ??= []).push(range);
+  }
+  // paredes partilhadas com uma divisão vizinha encostada: não desenhar
+  // (sem marcador — não é uma porta/janela, é só "a outra já desenha")
+  for (const h of hidden) {
+    const range = { offsetPx: h.startM * PX_PER_METER, widthPx: h.lengthM * PX_PER_METER };
+    (grouped[h.side] ??= []).push(range);
   }
   return grouped;
 }
@@ -71,9 +78,40 @@ function plusButtonPosition(side: WallSide, widthPx: number, heightPx: number) {
 export function Editor2D({ expanded = false }: Editor2DProps = {}) {
   const divisions = useProjectStore((s) => s.project.divisions);
   const selectedDivisionId = useProjectStore((s) => s.selectedDivisionId);
+  const selectedOpeningId = useProjectStore((s) => s.selectedOpeningId);
   const updateDivision = useProjectStore((s) => s.updateDivision);
+  const removeDivision = useProjectStore((s) => s.removeDivision);
   const selectDivision = useProjectStore((s) => s.selectDivision);
+  const selectOpening = useProjectStore((s) => s.selectOpening);
   const addAdjacentDivision = useProjectStore((s) => s.addAdjacentDivision);
+  const pasteDivision = useProjectStore((s) => s.pasteDivision);
+
+  const clipboardRef = useRef<Division | null>(null);
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      const tag = (document.activeElement?.tagName ?? "").toLowerCase();
+      if (tag === "input" || tag === "textarea" || tag === "select") return;
+
+      const state = useProjectStore.getState();
+      const selectedId = state.selectedDivisionId;
+      const mod = e.ctrlKey || e.metaKey;
+
+      if ((e.key === "Delete" || e.key === "Backspace") && selectedId) {
+        e.preventDefault();
+        removeDivision(selectedId);
+      } else if (mod && e.key.toLowerCase() === "c" && selectedId) {
+        e.preventDefault();
+        const division = state.project.divisions.find((d) => d.id === selectedId);
+        if (division) clipboardRef.current = structuredClone(division);
+      } else if (mod && e.key.toLowerCase() === "v" && clipboardRef.current) {
+        e.preventDefault();
+        pasteDivision(clipboardRef.current);
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [removeDivision, pasteDivision]);
 
   const prevBlockCounts = useRef<Map<string, number>>(new Map());
   const stageRef = useRef<Konva.Stage>(null);
@@ -99,18 +137,18 @@ export function Editor2D({ expanded = false }: Editor2DProps = {}) {
     return () => window.removeEventListener("resize", updateSize);
   }, [expanded]);
 
-  const divisionsRender = useMemo(
-    () =>
-      divisions.map((d) => {
-        const spec = resolveBlockSpec(d.blockSpecId, d.blockOverride);
-        const widthPx = d.width * PX_PER_METER;
-        const heightPx = d.height * PX_PER_METER;
-        const blocks = generateWallBlocks(widthPx, heightPx, spec, PX_PER_METER, openingsBySide(d), d.openWalls);
-        const thicknessPx = Math.max(4, (spec.thicknessCm / 100) * PX_PER_METER);
-        return { division: d, spec, widthPx, heightPx, blocks, thicknessPx };
-      }),
-    [divisions],
-  );
+  const divisionsRender = useMemo(() => {
+    const hidden = computeHiddenSegments(divisions);
+    return divisions.map((d) => {
+      const spec = resolveBlockSpec(d.blockSpecId, d.blockOverride);
+      const widthPx = d.width * PX_PER_METER;
+      const heightPx = d.height * PX_PER_METER;
+      const hiddenForD = hiddenSegmentsForDivision(hidden, d.id);
+      const blocks = generateWallBlocks(widthPx, heightPx, spec, PX_PER_METER, openingsBySide(d, hiddenForD), d.openWalls);
+      const thicknessPx = Math.max(4, (spec.thicknessCm / 100) * PX_PER_METER);
+      return { division: d, spec, widthPx, heightPx, blocks, thicknessPx };
+    });
+  }, [divisions]);
 
   useEffect(() => {
     const counts = prevBlockCounts.current;
@@ -209,6 +247,11 @@ export function Editor2D({ expanded = false }: Editor2DProps = {}) {
         onDragEnd={(e) => {
           if (e.target === e.target.getStage()) setView((v) => ({ ...v, x: e.target.x(), y: e.target.y() }));
         }}
+        onClick={(e) => {
+          if (e.target === e.target.getStage()) {
+            selectDivision(null);
+          }
+        }}
         onWheel={handleWheel}
       >
         <Layer>
@@ -273,6 +316,7 @@ export function Editor2D({ expanded = false }: Editor2DProps = {}) {
 
                 {d.openings.map((o) => {
                   const r = openingMarkerRect(o, widthPx, heightPx, thicknessPx);
+                  const openingSelected = o.id === selectedOpeningId;
                   return (
                     <Rect
                       key={o.id}
@@ -281,8 +325,13 @@ export function Editor2D({ expanded = false }: Editor2DProps = {}) {
                       width={r.width}
                       height={r.height}
                       fill={OPENING_FILL[o.type]}
-                      stroke="#3a2a1a"
-                      strokeWidth={0.5}
+                      stroke={openingSelected ? "#ff3b8d" : "#3a2a1a"}
+                      strokeWidth={openingSelected ? 2 : 0.5}
+                      onClick={(e) => {
+                        e.cancelBubble = true;
+                        selectDivision(d.id);
+                        selectOpening(o.id);
+                      }}
                     />
                   );
                 })}
