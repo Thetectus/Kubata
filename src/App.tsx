@@ -32,7 +32,7 @@ function App() {
   const hydrate = useProjectStore((s) => s.hydrate);
 
   const [ready, setReady] = useState(false);
-  const [show3D, setShow3D] = useState(false);
+  const [show3D, setShow3D] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const workspaceRef = useRef<HTMLDivElement>(null);
 
@@ -90,7 +90,7 @@ function App() {
   }
 
   return (
-    <div style={{ maxWidth: 1200, margin: "0 auto", padding: 24, fontFamily: "sans-serif" }}>
+    <div style={{ maxWidth: 1680, margin: "0 auto", padding: 24, fontFamily: "sans-serif" }}>
       {splashVisible && <LoadingScreen fadingOut={splashFadingOut} />}
       <header style={{ marginBottom: 16, display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
         <div>
@@ -142,12 +142,12 @@ function App() {
       </header>
 
       <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-        <button type="button" onClick={addDivision} disabled={!ready}>
+        <button type="button" className="btn-primary" onClick={addDivision} disabled={!ready}>
           + Adicionar divisão
         </button>
-        {!show3D && (
-          <button type="button" onClick={() => setShow3D(true)}>
-            Mostrar pré-visualização 3D
+        {!isFullscreen && (
+          <button type="button" onClick={() => setShow3D((v) => !v)}>
+            {show3D ? "Ocultar pré-visualização 3D" : "Mostrar pré-visualização 3D"}
           </button>
         )}
         <button type="button" onClick={toggleWorkspaceFullscreen}>

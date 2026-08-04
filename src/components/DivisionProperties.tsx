@@ -2,7 +2,8 @@ import { useState, type CSSProperties } from "react";
 import { useProjectStore } from "../store/projectStore";
 import { BLOCK_CATALOG, resolveBlockSpec } from "../lib/blocks";
 import { WALL_SIDES, sideLengthM } from "../lib/openings";
-import type { OpeningType, WallSide } from "../types/project";
+import { collidingOpeningIds } from "../lib/collisions";
+import type { Division, OpeningType, WallSide } from "../types/project";
 
 const SIDE_LABELS: Record<WallSide, string> = { top: "cima", right: "direita", bottom: "baixo", left: "esquerda" };
 const TYPE_LABELS: Record<OpeningType, string> = { porta: "Porta", janela: "Janela", balcao: "Balcão" };
@@ -12,6 +13,7 @@ export function DivisionProperties() {
   const selectedDivisionIds = useProjectStore((s) => s.selectedDivisionIds);
   const selectedOpeningId = useProjectStore((s) => s.selectedOpeningId);
   const updateDivision = useProjectStore((s) => s.updateDivision);
+  const updateDivisions = useProjectStore((s) => s.updateDivisions);
   const removeDivision = useProjectStore((s) => s.removeDivision);
   const removeDivisions = useProjectStore((s) => s.removeDivisions);
   const addOpening = useProjectStore((s) => s.addOpening);
@@ -33,14 +35,120 @@ export function DivisionProperties() {
   }
 
   if (selectedDivisionIds.length > 1) {
+    const selected = divisions.filter((d) => selectedDivisionIds.includes(d.id));
+    const ref = selected[0];
+    if (!ref) return null;
+    const refSpec = resolveBlockSpec(ref.blockSpecId, ref.blockOverride);
+    const applyToAll = (patch: Partial<Division>) => updateDivisions(selectedDivisionIds, patch);
+
     return (
       <div style={{ minWidth: 260, fontSize: 14 }}>
         <h2 style={{ fontSize: 16, marginBottom: 8 }}>{selectedDivisionIds.length} divisões seleccionadas</h2>
-        <p style={{ fontSize: 12, color: "#888" }}>
-          Ctrl+C / Ctrl+V copia e cola o grupo todo de uma vez. Para editar
-          propriedades individuais, selecciona só uma divisão (clica sem
-          Shift).
+        <p style={{ fontSize: 12, color: "#888", marginBottom: 8 }}>
+          Ctrl+C / Ctrl+V copia e cola o grupo todo de uma vez. Nome, largura
+          e comprimento ficam bloqueados aqui (são específicos de cada
+          divisão) — selecciona só uma (clica sem Shift) para os editar. O
+          resto aplica-se a todas as divisões seleccionadas de uma vez.
         </p>
+
+        <label style={row}>
+          Pé-direito / altura da parede (m)
+          <input
+            type="number"
+            step={0.1}
+            defaultValue={ref.wallHeightM}
+            onBlur={(e) => {
+              const v = e.target.valueAsNumber;
+              if (Number.isFinite(v) && v > 0) applyToAll({ wallHeightM: v });
+            }}
+          />
+        </label>
+
+        <label style={row}>
+          Tipo de bloco/tijolo
+          <select
+            value={ref.blockSpecId}
+            onChange={(e) => applyToAll({ blockSpecId: e.target.value, blockOverride: undefined })}
+          >
+            {BLOCK_CATALOG.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.name}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <p style={{ fontSize: 12, color: "#888", margin: "4px 0" }}>
+          Dimensão do bloco (comprimento × altura × espessura, cm) — aplicada
+          a todas as seleccionadas.
+        </p>
+        <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+          <DimInput
+            label="Compr."
+            value={refSpec.lengthCm}
+            onChange={(v) => applyToAll({ blockOverride: { ...ref.blockOverride, lengthCm: v } })}
+          />
+          <DimInput
+            label="Altura"
+            value={refSpec.heightCm}
+            onChange={(v) => applyToAll({ blockOverride: { ...ref.blockOverride, heightCm: v } })}
+          />
+          <DimInput
+            label="Espess."
+            value={refSpec.thicknessCm}
+            onChange={(v) => applyToAll({ blockOverride: { ...ref.blockOverride, thicknessCm: v } })}
+          />
+        </div>
+
+        <label style={row}>
+          Cor da parede / acabamento
+          <input type="color" defaultValue={ref.wallColor ?? "#b7b0a3"} onChange={(e) => applyToAll({ wallColor: e.target.value })} />
+        </label>
+        <button type="button" onClick={() => applyToAll({ wallColor: undefined })} style={{ fontSize: 12, marginBottom: 8 }}>
+          Repor cor padrão do bloco em todas
+        </button>
+
+        <h3 style={{ fontSize: 14, margin: "12px 0 6px" }}>Paredes</h3>
+        <p style={{ fontSize: 12, color: "#888", margin: "0 0 4px" }}>
+          Aplica a todas as divisões seleccionadas de uma vez (ex: abrir o
+          mesmo lado em várias divisões iguais).
+        </p>
+        <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 8 }}>
+          {WALL_SIDES.map((s) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => {
+                for (const d of selected) {
+                  const current = d.openWalls ?? [];
+                  const openWalls = current.includes(s) ? current : [...current, s];
+                  updateDivision(d.id, { openWalls });
+                }
+              }}
+              style={{ fontSize: 12 }}
+            >
+              Abrir lado {SIDE_LABELS[s]} em todas
+            </button>
+          ))}
+        </div>
+        <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 8 }}>
+          {WALL_SIDES.map((s) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => {
+                for (const d of selected) {
+                  const current = d.openWalls ?? [];
+                  updateDivision(d.id, { openWalls: current.filter((side) => side !== s) });
+                }
+              }}
+              style={{ fontSize: 12 }}
+            >
+              Fechar lado {SIDE_LABELS[s]} em todas
+            </button>
+          ))}
+        </div>
+
         <button
           type="button"
           onClick={() => removeDivisions(selectedDivisionIds)}
@@ -63,6 +171,7 @@ export function DivisionProperties() {
 
   const spec = resolveBlockSpec(division.blockSpecId, division.blockOverride);
   const isCustom = Boolean(division.blockOverride);
+  const collisions = collidingOpeningIds(division);
 
   return (
     <div style={{ minWidth: 260, fontSize: 14 }}>
@@ -87,7 +196,7 @@ export function DivisionProperties() {
         />
       </label>
       <label style={row}>
-        Profundidade (m)
+        Comprimento (m)
         <input
           type="number"
           step={0.1}
@@ -209,12 +318,20 @@ export function DivisionProperties() {
       )}
       {division.openings.length > 0 && (
         <p style={{ fontSize: 11, color: "#888", margin: "0 0 4px" }}>
-          Clica num item para o destacar no desenho.
+          Clica num item para o destacar no desenho. Também podes arrastá-las
+          directamente no desenho para outra posição ou parede.
+        </p>
+      )}
+      {collisions.size > 0 && (
+        <p style={{ fontSize: 12, color: "#b91c1c", margin: "0 0 6px", fontWeight: 600 }}>
+          ⚠ Há aberturas sobrepostas na mesma parede — corrige o
+          dimensionamento.
         </p>
       )}
       <div style={{ marginBottom: 6 }}>
         {division.openings.map((o) => {
           const isSelected = o.id === selectedOpeningId;
+          const hasCollision = collisions.has(o.id);
           return (
             <div
               key={o.id}
@@ -225,11 +342,12 @@ export function DivisionProperties() {
                 cursor: "pointer",
                 padding: "4px 6px",
                 borderRadius: 4,
-                background: isSelected ? "#fde3ef" : undefined,
-                border: isSelected ? "1px solid #ff3b8d" : "1px solid transparent",
+                background: hasCollision ? "#fee2e2" : isSelected ? "#fde3ef" : undefined,
+                border: hasCollision ? "1px solid #dc2626" : isSelected ? "1px solid #ff3b8d" : "1px solid transparent",
               }}
             >
               <span>
+                {hasCollision && "⚠ "}
                 {TYPE_LABELS[o.type]} — lado {SIDE_LABELS[o.side]}, {o.widthM}m (a {o.offsetM}m do canto)
               </span>
               <button

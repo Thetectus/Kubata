@@ -7,12 +7,14 @@ import { generateWallBlocks, type OpeningsBySide, type WallBlockRect } from "../
 import { WallBlockShape } from "./WallBlockShape";
 import { snapPosition } from "../lib/snapping";
 import { computeHiddenSegments, hiddenSegmentsForDivision, type HiddenSegment } from "../lib/adjacency";
+import { nearestSideAndOffset } from "../lib/nearestWall";
+import { collidingOpeningIds } from "../lib/collisions";
 import { ElementPalette } from "./ElementPalette";
 import type { Division, Opening, OpeningType, WallSide } from "../types/project";
 
 const PX_PER_METER = 30;
-const BASE_STAGE_WIDTH = 640;
-const BASE_STAGE_HEIGHT = 460;
+const BASE_STAGE_WIDTH = 720;
+const BASE_STAGE_HEIGHT = 520;
 const MIN_SCALE = 0.15;
 const MAX_SCALE = 3;
 const SNAP_THRESHOLD_PX = 8;
@@ -32,6 +34,41 @@ const DEFAULT_OPENING_WIDTH_M: Record<OpeningType, number> = {
   balcao: 1.5,
 };
 const SIDE_PLUS_OFFSET = 16;
+
+type ResizeSide = "top" | "bottom" | "left" | "right" | "top-left" | "top-right" | "bottom-left" | "bottom-right";
+const RESIZE_HANDLES: { side: ResizeSide; cursor: string }[] = [
+  { side: "top-left", cursor: "nwse-resize" },
+  { side: "top", cursor: "ns-resize" },
+  { side: "top-right", cursor: "nesw-resize" },
+  { side: "right", cursor: "ew-resize" },
+  { side: "bottom-right", cursor: "nwse-resize" },
+  { side: "bottom", cursor: "ns-resize" },
+  { side: "bottom-left", cursor: "nesw-resize" },
+  { side: "left", cursor: "ew-resize" },
+];
+
+function resizeHandlePosition(side: ResizeSide, widthPx: number, heightPx: number) {
+  const midX = widthPx / 2;
+  const midY = heightPx / 2;
+  switch (side) {
+    case "top-left":
+      return { x: 0, y: 0 };
+    case "top":
+      return { x: midX, y: 0 };
+    case "top-right":
+      return { x: widthPx, y: 0 };
+    case "right":
+      return { x: widthPx, y: midY };
+    case "bottom-right":
+      return { x: widthPx, y: heightPx };
+    case "bottom":
+      return { x: midX, y: heightPx };
+    case "bottom-left":
+      return { x: 0, y: heightPx };
+    case "left":
+      return { x: 0, y: midY };
+  }
+}
 
 interface Editor2DProps {
   /** Quando true (ecrã inteiro), o canvas ocupa o espaço disponível em vez do tamanho fixo. */
@@ -92,7 +129,9 @@ export function Editor2D({ expanded = false }: Editor2DProps = {}) {
   const addAdjacentDivision = useProjectStore((s) => s.addAdjacentDivision);
   const pasteDivisions = useProjectStore((s) => s.pasteDivisions);
   const addOpening = useProjectStore((s) => s.addOpening);
+  const updateOpening = useProjectStore((s) => s.updateOpening);
   const selectAllDivisions = useProjectStore((s) => s.selectAllDivisions);
+  const [hoveredDivisionId, setHoveredDivisionId] = useState<string | null>(null);
 
   const clipboardRef = useRef<Division[]>([]);
 
@@ -172,26 +211,14 @@ export function Editor2D({ expanded = false }: Editor2DProps = {}) {
       );
       if (!target) return;
 
-      const distTop = worldM.y - target.y;
-      const distBottom = target.y + target.height - worldM.y;
-      const distLeft = worldM.x - target.x;
-      const distRight = target.x + target.width - worldM.x;
-      const min = Math.min(distTop, distBottom, distLeft, distRight);
       const defaultWidth = DEFAULT_OPENING_WIDTH_M[type];
-      let side: WallSide;
-      let offsetM: number;
-      let sideLenM: number;
-      if (min === distTop || min === distBottom) {
-        side = min === distTop ? "top" : "bottom";
-        offsetM = worldM.x - target.x - defaultWidth / 2;
-        sideLenM = target.width;
-      } else {
-        side = min === distLeft ? "left" : "right";
-        offsetM = worldM.y - target.y - defaultWidth / 2;
-        sideLenM = target.height;
-      }
-      offsetM = Math.max(0, Math.min(round1(offsetM), Math.max(0, sideLenM - defaultWidth)));
-      addOpening(target.id, { type, side, offsetM, widthM: defaultWidth });
+      const { side, offset } = nearestSideAndOffset(
+        { x: worldM.x - target.x, y: worldM.y - target.y },
+        target.width,
+        target.height,
+        defaultWidth,
+      );
+      addOpening(target.id, { type, side, offsetM: round1(offset), widthM: defaultWidth });
       selectDivision(target.id);
     }
 
@@ -213,7 +240,8 @@ export function Editor2D({ expanded = false }: Editor2DProps = {}) {
       const hiddenForD = hiddenSegmentsForDivision(hidden, d.id);
       const blocks = generateWallBlocks(widthPx, heightPx, spec, PX_PER_METER, openingsBySide(d, hiddenForD), d.openWalls);
       const thicknessPx = Math.max(4, (spec.thicknessCm / 100) * PX_PER_METER);
-      return { division: d, spec, widthPx, heightPx, blocks, thicknessPx };
+      const colliding = collidingOpeningIds(d);
+      return { division: d, spec, widthPx, heightPx, blocks, thicknessPx, colliding };
     });
   }, [divisions]);
 
@@ -329,10 +357,11 @@ export function Editor2D({ expanded = false }: Editor2DProps = {}) {
           onWheel={handleWheel}
         >
           <Layer>
-            {divisionsRender.map(({ division: d, spec, widthPx, heightPx, blocks, thicknessPx }) => {
+            {divisionsRender.map(({ division: d, spec, widthPx, heightPx, blocks, thicknessPx, colliding }) => {
               const prevCount = prevBlockCounts.current.get(d.id) ?? 0;
               const selected = selectedDivisionIds.includes(d.id);
               const dimmed = selectedDivisionIds.length > 0 && !selected;
+              const hovered = hoveredDivisionId === d.id;
 
               return (
                 <Group
@@ -343,6 +372,8 @@ export function Editor2D({ expanded = false }: Editor2DProps = {}) {
                   draggable
                   onClick={(e) => selectDivision(d.id, e.evt.shiftKey)}
                   onTap={() => selectDivision(d.id)}
+                  onMouseEnter={() => setHoveredDivisionId(d.id)}
+                  onMouseLeave={() => setHoveredDivisionId((cur) => (cur === d.id ? null : cur))}
                   onDragMove={(e: Konva.KonvaEventObject<DragEvent>) => {
                     if (e.target !== e.currentTarget) return;
                     const others = divisions
@@ -391,6 +422,7 @@ export function Editor2D({ expanded = false }: Editor2DProps = {}) {
                   {d.openings.map((o) => {
                     const r = openingMarkerRect(o, widthPx, heightPx, thicknessPx);
                     const openingSelected = o.id === selectedOpeningId;
+                    const hasCollision = colliding.has(o.id);
                     return (
                       <Rect
                         key={o.id}
@@ -399,12 +431,45 @@ export function Editor2D({ expanded = false }: Editor2DProps = {}) {
                         width={r.width}
                         height={r.height}
                         fill={OPENING_FILL[o.type]}
-                        stroke={openingSelected ? "#ff3b8d" : "#3a2a1a"}
-                        strokeWidth={openingSelected ? 2 : 0.5}
+                        stroke={hasCollision ? "#dc2626" : openingSelected ? "#ff3b8d" : "#3a2a1a"}
+                        strokeWidth={hasCollision ? 2.5 : openingSelected ? 2 : 0.5}
+                        dash={hasCollision ? [3, 2] : undefined}
+                        draggable
+                        onMouseEnter={(e) => {
+                          const stage = e.target.getStage();
+                          if (stage) stage.container().style.cursor = "grab";
+                        }}
+                        onMouseLeave={(e) => {
+                          const stage = e.target.getStage();
+                          if (stage) stage.container().style.cursor = "default";
+                        }}
                         onClick={(e) => {
                           e.cancelBubble = true;
                           selectDivision(d.id);
                           selectOpening(o.id);
+                        }}
+                        onDragStart={(e) => {
+                          e.cancelBubble = true;
+                        }}
+                        onDragMove={(e) => {
+                          e.cancelBubble = true;
+                          const group = e.target.getParent();
+                          const rel = group?.getRelativePointerPosition();
+                          if (!rel) return;
+                          const { side, offset } = nearestSideAndOffset(rel, widthPx, heightPx, o.widthM * PX_PER_METER);
+                          const preview = openingMarkerRect({ ...o, side, offsetM: offset / PX_PER_METER }, widthPx, heightPx, thicknessPx);
+                          e.target.position({ x: preview.x, y: preview.y });
+                        }}
+                        onDragEnd={(e) => {
+                          e.cancelBubble = true;
+                          const group = e.target.getParent();
+                          const rel = group?.getRelativePointerPosition();
+                          if (!rel) {
+                            e.target.position({ x: r.x, y: r.y });
+                            return;
+                          }
+                          const { side, offset } = nearestSideAndOffset(rel, widthPx, heightPx, o.widthM * PX_PER_METER);
+                          updateOpening(d.id, o.id, { side, offsetM: round1(offset / PX_PER_METER) });
                         }}
                       />
                     );
@@ -419,28 +484,87 @@ export function Editor2D({ expanded = false }: Editor2DProps = {}) {
                     listening={false}
                   />
 
-                  {/* alça de redimensionar: canto inferior direito */}
-                  <Rect
-                    x={widthPx - 8}
-                    y={heightPx - 8}
-                    width={16}
-                    height={16}
-                    fill="#8a5a2b"
-                    draggable
-                    onDragMove={(e: Konva.KonvaEventObject<DragEvent>) => {
-                      e.cancelBubble = true;
-                      const newWidthPx = Math.max(1 * PX_PER_METER, e.target.x() + 8);
-                      const newHeightPx = Math.max(1 * PX_PER_METER, e.target.y() + 8);
-                      updateDivision(d.id, {
-                        width: round1(newWidthPx / PX_PER_METER),
-                        height: round1(newHeightPx / PX_PER_METER),
-                      });
-                      e.target.position({ x: newWidthPx - 8, y: newHeightPx - 8 });
-                    }}
-                    onDragEnd={(e: Konva.KonvaEventObject<DragEvent>) => {
-                      e.cancelBubble = true;
-                    }}
-                  />
+                  {/* alças de redimensionar: 4 cantos + 4 lados, subtis — só bem visíveis ao passar o rato */}
+                  {(selected || hovered) &&
+                    RESIZE_HANDLES.map((h) => {
+                      const pos = resizeHandlePosition(h.side, widthPx, heightPx);
+                      return (
+                        <Rect
+                          key={h.side}
+                          x={pos.x - 5}
+                          y={pos.y - 5}
+                          width={10}
+                          height={10}
+                          fill="#8a5a2b"
+                          opacity={0.45}
+                          cornerRadius={2}
+                          onMouseEnter={(e) => {
+                            e.target.opacity(0.95);
+                            const stage = e.target.getStage();
+                            if (stage) stage.container().style.cursor = h.cursor;
+                            e.target.getLayer()?.batchDraw();
+                          }}
+                          onMouseLeave={(e) => {
+                            e.target.opacity(0.45);
+                            const stage = e.target.getStage();
+                            if (stage) stage.container().style.cursor = "default";
+                            e.target.getLayer()?.batchDraw();
+                          }}
+                          onMouseDown={(e) => {
+                            e.cancelBubble = true;
+                            const stage = stageRef.current;
+                            const p0 = stage?.getPointerPosition();
+                            if (!stage || !p0) return;
+                            const startWorldPx = { x: (p0.x - view.x) / view.scale, y: (p0.y - view.y) / view.scale };
+                            const start = { x: d.x, y: d.y, width: d.width, height: d.height };
+                            const containerEl = stage.container();
+
+                            function onMove(ev: MouseEvent) {
+                              const rect = containerEl.getBoundingClientRect();
+                              const worldPx = {
+                                x: (ev.clientX - rect.left - view.x) / view.scale,
+                                y: (ev.clientY - rect.top - view.y) / view.scale,
+                              };
+                              const dxM = (worldPx.x - startWorldPx.x) / PX_PER_METER;
+                              const dyM = (worldPx.y - startWorldPx.y) / PX_PER_METER;
+                              let x = start.x;
+                              let y = start.y;
+                              let width = start.width;
+                              let height = start.height;
+                              if (h.side.includes("left")) {
+                                width = start.width - dxM;
+                                x = start.x + dxM;
+                              }
+                              if (h.side.includes("right")) {
+                                width = start.width + dxM;
+                              }
+                              if (h.side.includes("top")) {
+                                height = start.height - dyM;
+                                y = start.y + dyM;
+                              }
+                              if (h.side.includes("bottom")) {
+                                height = start.height + dyM;
+                              }
+                              if (width < 1) {
+                                x = h.side.includes("left") ? start.x + start.width - 1 : start.x;
+                                width = 1;
+                              }
+                              if (height < 1) {
+                                y = h.side.includes("top") ? start.y + start.height - 1 : start.y;
+                                height = 1;
+                              }
+                              updateDivision(d.id, { x: round1(x), y: round1(y), width: round1(width), height: round1(height) });
+                            }
+                            function onUp() {
+                              window.removeEventListener("mousemove", onMove);
+                              window.removeEventListener("mouseup", onUp);
+                            }
+                            window.addEventListener("mousemove", onMove);
+                            window.addEventListener("mouseup", onUp);
+                          }}
+                        />
+                      );
+                    })}
 
                   {selected &&
                     selectedDivisionIds.length === 1 &&

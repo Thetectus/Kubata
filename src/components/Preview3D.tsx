@@ -15,9 +15,11 @@ const CATEGORY_COLOR: Record<string, string> = {
 
 type PreviewSize = "normal" | "medium" | "full";
 
+// Tamanho "normal" igual ao do canvas 2D por defeito (720×520) — para os
+// dois ecrãs terem peso visual semelhante lado a lado.
 const SIZE_DIMENSIONS: Record<Exclude<PreviewSize, "full">, { width: number; height: number }> = {
-  normal: { width: 400, height: 320 },
-  medium: { width: 760, height: 560 },
+  normal: { width: 720, height: 520 },
+  medium: { width: 900, height: 620 },
 };
 
 function DivisionWalls({ division, hidden }: { division: Division; hidden: HiddenSegment[] }) {

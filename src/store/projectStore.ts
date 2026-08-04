@@ -29,9 +29,12 @@ interface ProjectState {
   updateProjectMeta: (patch: Partial<Pick<Project, "name" | "kind">>) => void;
   hydrate: (payload: PersistedProject) => void;
   addOpening: (divisionId: string, opening: Omit<Opening, "id">) => void;
+  updateOpening: (divisionId: string, openingId: string, patch: Partial<Omit<Opening, "id">>) => void;
   removeOpening: (divisionId: string, openingId: string) => void;
   appendGeneratedDivisions: (divisions: GeneratedDivision[]) => void;
   addAdjacentDivision: (divisionId: string, side: WallSide) => void;
+  /** aplica o mesmo patch a várias divisões de uma vez (edição em bloco, multi-selecção) */
+  updateDivisions: (ids: string[], patch: Partial<Division>) => void;
 }
 
 export interface GeneratedDivision {
@@ -230,6 +233,18 @@ export const useProjectStore = create<ProjectState>()((set) => ({
     });
   },
 
+  updateOpening: (divisionId, openingId, patch) => {
+    set((state) => {
+      const divisions = state.project.divisions.map((d) =>
+        d.id === divisionId
+          ? { ...d, openings: d.openings.map((o) => (o.id === openingId ? { ...o, ...patch } : o)) }
+          : d,
+      );
+      const project = { ...state.project, divisions };
+      return { project, materials: recalculate(project, state.materials) };
+    });
+  },
+
   removeOpening: (divisionId, openingId) => {
     set((state) => {
       const divisions = state.project.divisions.map((d) =>
@@ -302,6 +317,15 @@ export const useProjectStore = create<ProjectState>()((set) => ({
         materials: recalculate(project, state.materials),
         selectedDivisionIds: [division.id],
       };
+    });
+  },
+
+  updateDivisions: (ids, patch) => {
+    set((state) => {
+      const idSet = new Set(ids);
+      const divisions = state.project.divisions.map((d) => (idSet.has(d.id) ? { ...d, ...patch } : d));
+      const project = { ...state.project, divisions };
+      return { project, materials: recalculate(project, state.materials) };
     });
   },
 }));
