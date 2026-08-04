@@ -240,7 +240,7 @@ export function Editor2D({ expanded = false }: Editor2DProps = {}) {
       const hiddenForD = hiddenSegmentsForDivision(hidden, d.id);
       const blocks = generateWallBlocks(widthPx, heightPx, spec, PX_PER_METER, openingsBySide(d, hiddenForD), d.openWalls);
       const thicknessPx = Math.max(4, (spec.thicknessCm / 100) * PX_PER_METER);
-      const colliding = collidingOpeningIds(d);
+      const colliding = collidingOpeningIds(d, hiddenForD);
       return { division: d, spec, widthPx, heightPx, blocks, thicknessPx, colliding };
     });
   }, [divisions]);
@@ -282,10 +282,15 @@ export function Editor2D({ expanded = false }: Editor2DProps = {}) {
       MIN_SCALE,
       MAX_SCALE,
     );
+    // centra o conteúdo no espaço disponível (em vez de o encostar ao
+    // canto superior esquerdo, que deixava vazio à direita/em baixo
+    // sempre que a proporção do conteúdo não coincidia com a do stage)
+    const offsetX = (STAGE_WIDTH - contentWidth * scale) / 2;
+    const offsetY = (STAGE_HEIGHT - contentHeight * scale) / 2;
     setView({
       scale,
-      x: padding / 2 - minX * PX_PER_METER * scale,
-      y: padding / 2 - minY * PX_PER_METER * scale,
+      x: offsetX - minX * PX_PER_METER * scale,
+      y: offsetY - minY * PX_PER_METER * scale,
     });
   }
 

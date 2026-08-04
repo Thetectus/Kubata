@@ -3,6 +3,7 @@ import { useProjectStore } from "../store/projectStore";
 import { BLOCK_CATALOG, resolveBlockSpec } from "../lib/blocks";
 import { WALL_SIDES, sideLengthM } from "../lib/openings";
 import { collidingOpeningIds } from "../lib/collisions";
+import { computeHiddenSegments, hiddenSegmentsForDivision } from "../lib/adjacency";
 import type { Division, OpeningType, WallSide } from "../types/project";
 
 const SIDE_LABELS: Record<WallSide, string> = { top: "cima", right: "direita", bottom: "baixo", left: "esquerda" };
@@ -171,7 +172,8 @@ export function DivisionProperties() {
 
   const spec = resolveBlockSpec(division.blockSpecId, division.blockOverride);
   const isCustom = Boolean(division.blockOverride);
-  const collisions = collidingOpeningIds(division);
+  const hiddenForDivision = hiddenSegmentsForDivision(computeHiddenSegments(divisions), division.id);
+  const collisions = collidingOpeningIds(division, hiddenForDivision);
 
   return (
     <div style={{ minWidth: 260, fontSize: 14 }}>
@@ -324,8 +326,8 @@ export function DivisionProperties() {
       )}
       {collisions.size > 0 && (
         <p style={{ fontSize: 12, color: "#b91c1c", margin: "0 0 6px", fontWeight: 600 }}>
-          ⚠ Há aberturas sobrepostas na mesma parede — corrige o
-          dimensionamento.
+          ⚠ Há aberturas sobrepostas entre si, ou sobre uma parede
+          partilhada com outra divisão — corrige o dimensionamento.
         </p>
       )}
       <div style={{ marginBottom: 6 }}>

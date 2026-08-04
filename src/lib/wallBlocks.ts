@@ -21,9 +21,11 @@ const GAP_PX = 1;
 /**
  * Gera os blocos visuais (em px) que compõem o contorno de uma divisão,
  * tilados ao longo de cada lado usando o comprimento real do bloco
- * seleccionado. Blocos que caiam dentro de uma porta/janela são omitidos
- * (deixa um vão). Serve só para o desenho — a quantidade "oficial" vem de
- * lib/materials.ts (cálculo por área, mais preciso que contar blocos 2D).
+ * seleccionado. Blocos que atravessem uma porta/janela são cortados
+ * exactamente no limite da abertura (não omitidos por inteiro — isso
+ * deixava um vão maior do que a abertura real). Serve só para o desenho —
+ * a quantidade "oficial" vem de lib/materials.ts (cálculo por área, mais
+ * preciso que contar blocos 2D).
  */
 export function generateWallBlocks(
   widthPx: number,
@@ -47,9 +49,31 @@ export function generateWallBlocks(
   return blocks;
 }
 
-function overlapsAny(start: number, end: number, ranges?: OpeningRangePx[]): boolean {
-  if (!ranges) return false;
-  return ranges.some((r) => start < r.offsetPx + r.widthPx && end > r.offsetPx);
+/**
+ * Devolve os troços de [start,end) que NÃO são cobertos por nenhuma range
+ * (porta/janela/balcão) — em vez de simplesmente omitir o bloco inteiro
+ * quando toca numa abertura (o que deixava um vão maior do que a
+ * abertura real, "como se faltassem tijolos"), corta o bloco exactamente
+ * no limite da abertura, como um bloco cortado numa obra a sério.
+ */
+function subtractRanges(start: number, end: number, ranges?: OpeningRangePx[]): Array<[number, number]> {
+  let segments: Array<[number, number]> = [[start, end]];
+  if (!ranges || ranges.length === 0) return segments;
+  for (const r of ranges) {
+    const rStart = r.offsetPx;
+    const rEnd = r.offsetPx + r.widthPx;
+    const next: Array<[number, number]> = [];
+    for (const [s, e] of segments) {
+      if (rEnd <= s || rStart >= e) {
+        next.push([s, e]);
+        continue;
+      }
+      if (rStart > s) next.push([s, rStart]);
+      if (rEnd < e) next.push([rEnd, e]);
+    }
+    segments = next;
+  }
+  return segments;
 }
 
 function tileRow(
@@ -66,11 +90,13 @@ function tileRow(
   let i = 0;
   while (x < x0 + totalWidth - 1) {
     const w = Math.min(blockLen - GAP_PX, x0 + totalWidth - x);
-    if (w > 1 && !overlapsAny(x - x0, x - x0 + w, ranges)) {
-      out.push({ key: `${side}-${i}`, x, y, width: w, height: thickness });
+    for (const [segStart, segEnd] of subtractRanges(x - x0, x - x0 + w, ranges)) {
+      if (segEnd - segStart > 1) {
+        out.push({ key: `${side}-${i}`, x: x0 + segStart, y, width: segEnd - segStart, height: thickness });
+        i += 1;
+      }
     }
     x += blockLen;
-    i += 1;
   }
 }
 
@@ -88,10 +114,12 @@ function tileCol(
   let i = 0;
   while (y < y0 + totalHeight - 1 && totalHeight > 0) {
     const h = Math.min(blockLen - GAP_PX, y0 + totalHeight - y);
-    if (h > 1 && !overlapsAny(y - y0, y - y0 + h, ranges)) {
-      out.push({ key: `${side}-${i}`, x, y, width: thickness, height: h });
+    for (const [segStart, segEnd] of subtractRanges(y - y0, y - y0 + h, ranges)) {
+      if (segEnd - segStart > 1) {
+        out.push({ key: `${side}-${i}`, x, y: y0 + segStart, width: thickness, height: segEnd - segStart });
+        i += 1;
+      }
     }
     y += blockLen;
-    i += 1;
   }
 }
