@@ -49,6 +49,22 @@ export function generateWallBlocks(
   return blocks;
 }
 
+/** Blocos para uma parede livre (segmento simples, sem 4 lados) — usado
+ * para desenhar muros/paredes soltas no canvas, tiladas ao longo do
+ * comprimento com a mesma lógica de corte nas aberturas. */
+export function generateFreeWallBlocks(
+  lengthPx: number,
+  spec: BlockSpec,
+  pxPerMeter: number,
+  openings: OpeningRangePx[] = [],
+): WallBlockRect[] {
+  const thickness = Math.max(4, (spec.thicknessCm / 100) * pxPerMeter);
+  const blockLen = Math.max(6, (spec.lengthCm / 100) * pxPerMeter);
+  const blocks: WallBlockRect[] = [];
+  tileRow(blocks, "wall", 0, 0, lengthPx, thickness, blockLen, openings);
+  return blocks;
+}
+
 /**
  * Devolve os troços de [start,end) que NÃO são cobertos por nenhuma range
  * (porta/janela/balcão) — em vez de simplesmente omitir o bloco inteiro

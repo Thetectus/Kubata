@@ -133,5 +133,6 @@ export function instantiateTemplate(template: ProjectTemplate): Project {
       id: crypto.randomUUID(),
       openings: (d.openings ?? []).map((o) => ({ ...o, id: crypto.randomUUID() })),
     })),
+    freeWalls: [],
   };
 }

@@ -3,10 +3,11 @@ import { Canvas } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import { useProjectStore } from "../store/projectStore";
 import { resolveBlockSpec } from "../lib/blocks";
-import { wallSegments3D } from "../lib/wallSegments3d";
+import { freeWallSegments3D, wallSegments3D } from "../lib/wallSegments3d";
+import { freeWallIsHorizontal } from "../lib/openings";
 import { computeHiddenSegments, hiddenSegmentsForDivision, type HiddenSegment } from "../lib/adjacency";
 import { LoadingScreen } from "./LoadingScreen";
-import type { Division } from "../types/project";
+import type { Division, FreeWall } from "../types/project";
 
 const CATEGORY_COLOR: Record<string, string> = {
   tijolo: "#c96f3c",
@@ -52,6 +53,33 @@ function DivisionWalls({ division, hidden }: { division: Division; hidden: Hidde
   );
 }
 
+function FreeWallMesh({ wall }: { wall: FreeWall }) {
+  const spec = resolveBlockSpec(wall.blockSpecId, wall.blockOverride);
+  const thickness = spec.thicknessCm / 100;
+  const color = wall.wallColor ?? CATEGORY_COLOR[spec.category];
+  const isHorizontal = freeWallIsHorizontal(wall);
+  const startX = Math.min(wall.x1, wall.x2);
+  const startY = Math.min(wall.y1, wall.y2);
+  const segments = freeWallSegments3D(wall);
+
+  return (
+    <group>
+      {segments.map((seg, i) => {
+        const width = isHorizontal ? seg.lengthM : thickness;
+        const depth = isHorizontal ? thickness : seg.lengthM;
+        const x = isHorizontal ? startX + seg.startM + seg.lengthM / 2 : wall.x1;
+        const z = isHorizontal ? wall.y1 : startY + seg.startM + seg.lengthM / 2;
+        return (
+          <mesh key={i} position={[x, wall.wallHeightM / 2, z]}>
+            <boxGeometry args={[width, wall.wallHeightM, depth]} />
+            <meshStandardMaterial color={color} />
+          </mesh>
+        );
+      })}
+    </group>
+  );
+}
+
 /** Maquete 3D bastante simples: extrude as paredes já desenhadas no
  * editor 2D (com vãos onde há portas/janelas, e sem duplicar paredes
  * partilhadas entre divisões encostadas). Sem texturas nem mobiliário —
@@ -61,6 +89,7 @@ function DivisionWalls({ division, hidden }: { division: Division; hidden: Hidde
  * ecrã inteiro (Fullscreen API real, para apresentações). */
 export function Preview3D() {
   const divisions = useProjectStore((s) => s.project.divisions);
+  const freeWalls = useProjectStore((s) => s.project.freeWalls);
   const containerRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState<PreviewSize>("normal");
   const [preparingFull, setPreparingFull] = useState(false);
@@ -147,6 +176,9 @@ export function Preview3D() {
           </mesh>
           {divisions.map((d) => (
             <DivisionWalls key={d.id} division={d} hidden={hiddenSegmentsForDivision(hidden, d.id)} />
+          ))}
+          {freeWalls.map((w) => (
+            <FreeWallMesh key={w.id} wall={w} />
           ))}
           <OrbitControls target={[center.x, 1.5, center.z]} />
         </Canvas>

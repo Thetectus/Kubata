@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { Division, MaterialLine, Opening, Project, WallSide } from "../types/project";
+import type { Division, FreeWall, MaterialLine, Opening, Project, WallSide } from "../types/project";
 import { calculateComputedMaterials } from "../lib/materials";
 import { BLOCK_CATALOG } from "../lib/blocks";
 import type { PersistedProject } from "../lib/projectSync";
@@ -11,6 +11,8 @@ interface ProjectState {
   /** conjunto de divisões seleccionadas; a última clicada fica em último lugar (é a "principal") */
   selectedDivisionIds: string[];
   selectedOpeningId: string | null;
+  /** parede livre seleccionada (mutuamente exclusiva com selectedDivisionIds) */
+  selectedFreeWallId: string | null;
   selectOpening: (id: string | null) => void;
   pasteDivisions: (sources: Division[]) => void;
   addDivision: () => void;
@@ -35,6 +37,13 @@ interface ProjectState {
   addAdjacentDivision: (divisionId: string, side: WallSide) => void;
   /** aplica o mesmo patch a várias divisões de uma vez (edição em bloco, multi-selecção) */
   updateDivisions: (ids: string[], patch: Partial<Division>) => void;
+  addFreeWall: (x1: number, y1: number, x2: number, y2: number) => void;
+  updateFreeWall: (id: string, patch: Partial<FreeWall>) => void;
+  removeFreeWall: (id: string) => void;
+  selectFreeWall: (id: string | null) => void;
+  addFreeWallOpening: (freeWallId: string, opening: Omit<Opening, "id">) => void;
+  updateFreeWallOpening: (freeWallId: string, openingId: string, patch: Partial<Omit<Opening, "id">>) => void;
+  removeFreeWallOpening: (freeWallId: string, openingId: string) => void;
 }
 
 export interface GeneratedDivision {
@@ -45,9 +54,9 @@ export interface GeneratedDivision {
   openings?: Omit<Opening, "id">[];
 }
 
-/** Recalcula as linhas "computed" a partir das divisões, preserva as "custom" tal como estão. */
+/** Recalcula as linhas "computed" a partir das divisões e paredes livres, preserva as "custom" tal como estão. */
 function recalculate(project: Project, prevMaterials: MaterialLine[]): MaterialLine[] {
-  const freshComputed = calculateComputedMaterials(project.divisions).map((line) => {
+  const freshComputed = calculateComputedMaterials(project.divisions, project.freeWalls).map((line) => {
     const prev = prevMaterials.find((m) => m.id === line.id);
     return prev?.userPrice !== undefined ? { ...line, userPrice: prev.userPrice } : line;
   });
@@ -56,7 +65,7 @@ function recalculate(project: Project, prevMaterials: MaterialLine[]): MaterialL
 }
 
 function emptyProject(): Project {
-  return { id: crypto.randomUUID(), name: "Novo projecto", kind: "construir", divisions: [] };
+  return { id: crypto.randomUUID(), name: "Novo projecto", kind: "construir", divisions: [], freeWalls: [] };
 }
 
 export const useProjectStore = create<ProjectState>()((set) => ({
@@ -64,6 +73,7 @@ export const useProjectStore = create<ProjectState>()((set) => ({
   materials: [],
   selectedDivisionIds: [],
   selectedOpeningId: null,
+  selectedFreeWallId: null,
 
   selectOpening: (id) => set({ selectedOpeningId: id }),
 
@@ -146,12 +156,12 @@ export const useProjectStore = create<ProjectState>()((set) => ({
 
   selectDivision: (id, additive = false) => {
     set((state) => {
-      if (id === null) return { selectedDivisionIds: [], selectedOpeningId: null };
-      if (!additive) return { selectedDivisionIds: [id], selectedOpeningId: null };
+      if (id === null) return { selectedDivisionIds: [], selectedOpeningId: null, selectedFreeWallId: null };
+      if (!additive) return { selectedDivisionIds: [id], selectedOpeningId: null, selectedFreeWallId: null };
       const without = state.selectedDivisionIds.filter((sid) => sid !== id);
       const selectedDivisionIds =
         without.length === state.selectedDivisionIds.length ? [...state.selectedDivisionIds, id] : without;
-      return { selectedDivisionIds, selectedOpeningId: null };
+      return { selectedDivisionIds, selectedOpeningId: null, selectedFreeWallId: null };
     });
   },
 
@@ -159,7 +169,12 @@ export const useProjectStore = create<ProjectState>()((set) => ({
     set((state) => ({
       selectedDivisionIds: state.project.divisions.map((d) => d.id),
       selectedOpeningId: null,
+      selectedFreeWallId: null,
     }));
+  },
+
+  selectFreeWall: (id) => {
+    set({ selectedFreeWallId: id, selectedDivisionIds: [], selectedOpeningId: null });
   },
 
   setUserPrice: (materialId, price) => {
@@ -192,8 +207,8 @@ export const useProjectStore = create<ProjectState>()((set) => ({
 
   newProject: (name, kind) => {
     set(() => {
-      const project: Project = { id: crypto.randomUUID(), name, kind, divisions: [] };
-      return { project, materials: [], selectedDivisionIds: [], selectedOpeningId: null };
+      const project: Project = { id: crypto.randomUUID(), name, kind, divisions: [], freeWalls: [] };
+      return { project, materials: [], selectedDivisionIds: [], selectedOpeningId: null, selectedFreeWallId: null };
     });
   },
 
@@ -204,6 +219,7 @@ export const useProjectStore = create<ProjectState>()((set) => ({
         project,
         materials: recalculate(project, []),
         selectedDivisionIds: project.divisions[0] ? [project.divisions[0].id] : [],
+        selectedFreeWallId: null,
       };
     });
   },
@@ -214,10 +230,11 @@ export const useProjectStore = create<ProjectState>()((set) => ({
 
   hydrate: (payload) => {
     set(() => ({
-      project: payload.project,
+      project: { ...payload.project, freeWalls: payload.project.freeWalls ?? [] },
       materials: payload.materials,
       selectedDivisionIds: [],
       selectedOpeningId: null,
+      selectedFreeWallId: null,
     }));
   },
 
@@ -325,6 +342,82 @@ export const useProjectStore = create<ProjectState>()((set) => ({
       const idSet = new Set(ids);
       const divisions = state.project.divisions.map((d) => (idSet.has(d.id) ? { ...d, ...patch } : d));
       const project = { ...state.project, divisions };
+      return { project, materials: recalculate(project, state.materials) };
+    });
+  },
+
+  addFreeWall: (x1, y1, x2, y2) => {
+    set((state) => {
+      const wall: FreeWall = {
+        id: crypto.randomUUID(),
+        label: `Parede ${state.project.freeWalls.length + 1}`,
+        x1,
+        y1,
+        x2,
+        y2,
+        wallHeightM: 3,
+        blockSpecId: BLOCK_CATALOG[1].id,
+        openings: [],
+      };
+      const project = { ...state.project, freeWalls: [...state.project.freeWalls, wall] };
+      return {
+        project,
+        materials: recalculate(project, state.materials),
+        selectedFreeWallId: wall.id,
+        selectedDivisionIds: [],
+        selectedOpeningId: null,
+      };
+    });
+  },
+
+  updateFreeWall: (id, patch) => {
+    set((state) => {
+      const freeWalls = state.project.freeWalls.map((w) => (w.id === id ? { ...w, ...patch } : w));
+      const project = { ...state.project, freeWalls };
+      return { project, materials: recalculate(project, state.materials) };
+    });
+  },
+
+  removeFreeWall: (id) => {
+    set((state) => {
+      const freeWalls = state.project.freeWalls.filter((w) => w.id !== id);
+      const project = { ...state.project, freeWalls };
+      return {
+        project,
+        materials: recalculate(project, state.materials),
+        selectedFreeWallId: state.selectedFreeWallId === id ? null : state.selectedFreeWallId,
+      };
+    });
+  },
+
+  addFreeWallOpening: (freeWallId, opening) => {
+    set((state) => {
+      const freeWalls = state.project.freeWalls.map((w) =>
+        w.id === freeWallId ? { ...w, openings: [...w.openings, { ...opening, id: crypto.randomUUID() }] } : w,
+      );
+      const project = { ...state.project, freeWalls };
+      return { project, materials: recalculate(project, state.materials) };
+    });
+  },
+
+  updateFreeWallOpening: (freeWallId, openingId, patch) => {
+    set((state) => {
+      const freeWalls = state.project.freeWalls.map((w) =>
+        w.id === freeWallId
+          ? { ...w, openings: w.openings.map((o) => (o.id === openingId ? { ...o, ...patch } : o)) }
+          : w,
+      );
+      const project = { ...state.project, freeWalls };
+      return { project, materials: recalculate(project, state.materials) };
+    });
+  },
+
+  removeFreeWallOpening: (freeWallId, openingId) => {
+    set((state) => {
+      const freeWalls = state.project.freeWalls.map((w) =>
+        w.id === freeWallId ? { ...w, openings: w.openings.filter((o) => o.id !== openingId) } : w,
+      );
+      const project = { ...state.project, freeWalls };
       return { project, materials: recalculate(project, state.materials) };
     });
   },

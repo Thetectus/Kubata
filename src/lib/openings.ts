@@ -1,4 +1,4 @@
-import type { Division, Opening, OpeningType, WallSide } from "../types/project";
+import type { Division, FreeWall, Opening, OpeningType, WallSide } from "../types/project";
 
 /** Alturas padrão (m) usadas para estimar a área de uma abertura — valor de
  * partida comum, não uma norma angolana verificada. */
@@ -18,12 +18,35 @@ export function openingAreaM2(opening: Opening): number {
   return opening.widthM * DEFAULT_OPENING_HEIGHT_M[opening.type];
 }
 
+function isFreePlaced(o: Opening): boolean {
+  return o.freeX !== undefined && o.freeY !== undefined;
+}
+
+/** Só conta aberturas presas a uma parede — uma abertura "livre" (solta
+ * dentro da divisão, ex: um balcão largado a meio) não está sobre
+ * nenhuma parede, por isso não desconta área de parede nenhuma. */
 export function totalOpeningsAreaM2(division: Division): number {
-  return division.openings.reduce((sum, o) => sum + openingAreaM2(o), 0);
+  return division.openings.reduce((sum, o) => (isFreePlaced(o) ? sum : sum + openingAreaM2(o)), 0);
 }
 
 /** Área das paredes removidas por completo (lados marcados como abertos). */
 export function openWallsAreaM2(division: Division): number {
   const sides = division.openWalls ?? [];
   return sides.reduce((sum, side) => sum + sideLengthM(division, side) * division.wallHeightM, 0);
+}
+
+export function freeWallLengthM(wall: FreeWall): number {
+  return Math.abs(wall.x2 - wall.x1) + Math.abs(wall.y2 - wall.y1);
+}
+
+export function freeWallIsHorizontal(wall: FreeWall): boolean {
+  return Math.abs(wall.y2 - wall.y1) < 0.001;
+}
+
+export function freeWallOpeningsAreaM2(wall: FreeWall): number {
+  return wall.openings.reduce((sum, o) => sum + openingAreaM2(o), 0);
+}
+
+export function freeWallAreaM2(wall: FreeWall): number {
+  return Math.max(0, freeWallLengthM(wall) * wall.wallHeightM - freeWallOpeningsAreaM2(wall));
 }

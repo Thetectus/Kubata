@@ -1,6 +1,6 @@
-import type { Division, MaterialLine } from "../types/project";
+import type { Division, FreeWall, MaterialLine } from "../types/project";
 import { blocksPerM2, defaultPricePerUnit, resolveBlockSpec, specKey, type BlockSpec } from "./blocks";
-import { openWallsAreaM2, totalOpeningsAreaM2 } from "./openings";
+import { freeWallAreaM2, openWallsAreaM2, totalOpeningsAreaM2 } from "./openings";
 import { computeHiddenSegments, hiddenSegmentsForDivision } from "./adjacency";
 
 /**
@@ -28,25 +28,24 @@ export function wallAreaM2(d: Division, sharedWithNeighboursM = 0): number {
   return Math.max(0, grossArea - totalOpeningsAreaM2(d) - openWallsAreaM2(d) - sharedWithNeighboursM * d.wallHeightM);
 }
 
-export function totalWallAreaM2(divisions: Division[]): number {
+export function totalWallAreaM2(divisions: Division[], freeWalls: FreeWall[] = []): number {
   const hidden = computeHiddenSegments(divisions);
-  return divisions.reduce((sum, d) => {
+  const divisionsArea = divisions.reduce((sum, d) => {
     const sharedM = hiddenSegmentsForDivision(hidden, d.id).reduce((s, h) => s + h.lengthM, 0);
     return sum + wallAreaM2(d, sharedM);
   }, 0);
+  const freeWallsArea = freeWalls.reduce((sum, w) => sum + freeWallAreaM2(w), 0);
+  return divisionsArea + freeWallsArea;
 }
 
-/** Materiais calculados automaticamente a partir das divisões (cimento, areia, blocos). */
-export function calculateComputedMaterials(divisions: Division[]): MaterialLine[] {
+/** Materiais calculados automaticamente a partir das divisões e paredes livres (cimento, areia, blocos). */
+export function calculateComputedMaterials(divisions: Division[], freeWalls: FreeWall[] = []): MaterialLine[] {
   let cimentoKg = 0;
   let areiaM3 = 0;
   const blocksBySpec = new Map<string, { spec: BlockSpec; quantity: number }>();
   const hidden = computeHiddenSegments(divisions);
 
-  for (const d of divisions) {
-    const sharedM = hiddenSegmentsForDivision(hidden, d.id).reduce((s, h) => s + h.lengthM, 0);
-    const area = wallAreaM2(d, sharedM);
-    const spec = resolveBlockSpec(d.blockSpecId, d.blockOverride);
+  function addWallArea(area: number, spec: BlockSpec) {
     const mortar = MORTAR_COEFFICIENTS[spec.category];
     cimentoKg += area * mortar.cimentoKgPorM2;
     areiaM3 += area * mortar.areiaM3PorM2;
@@ -56,6 +55,19 @@ export function calculateComputedMaterials(divisions: Division[]): MaterialLine[
     const existing = blocksBySpec.get(key);
     if (existing) existing.quantity += quantity;
     else blocksBySpec.set(key, { spec, quantity });
+  }
+
+  for (const d of divisions) {
+    const sharedM = hiddenSegmentsForDivision(hidden, d.id).reduce((s, h) => s + h.lengthM, 0);
+    const area = wallAreaM2(d, sharedM);
+    const spec = resolveBlockSpec(d.blockSpecId, d.blockOverride);
+    addWallArea(area, spec);
+  }
+
+  for (const w of freeWalls) {
+    const area = freeWallAreaM2(w);
+    const spec = resolveBlockSpec(w.blockSpecId, w.blockOverride);
+    addWallArea(area, spec);
   }
 
   const lines: MaterialLine[] = [

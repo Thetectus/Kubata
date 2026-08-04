@@ -13,13 +13,14 @@ function formatKz(n: number): string {
 export function MaterialsPanel() {
   const materials = useProjectStore((s) => s.materials);
   const divisions = useProjectStore((s) => s.project.divisions);
+  const freeWalls = useProjectStore((s) => s.project.freeWalls);
   const setUserPrice = useProjectStore((s) => s.setUserPrice);
   const addCustomMaterial = useProjectStore((s) => s.addCustomMaterial);
   const updateCustomMaterial = useProjectStore((s) => s.updateCustomMaterial);
   const removeCustomMaterial = useProjectStore((s) => s.removeCustomMaterial);
   const [collapsed, setCollapsed] = useState(false);
 
-  const totalArea = totalWallAreaM2(divisions);
+  const totalArea = totalWallAreaM2(divisions, freeWalls);
   const grandTotal = totalCost(materials, totalArea);
 
   return (

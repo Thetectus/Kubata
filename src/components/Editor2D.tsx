@@ -3,14 +3,15 @@ import { Stage, Layer, Rect, Text, Group, Line, Circle } from "react-konva";
 import type Konva from "konva";
 import { useProjectStore } from "../store/projectStore";
 import { resolveBlockSpec } from "../lib/blocks";
-import { generateWallBlocks, type OpeningsBySide, type WallBlockRect } from "../lib/wallBlocks";
+import { generateFreeWallBlocks, generateWallBlocks, type OpeningsBySide, type WallBlockRect } from "../lib/wallBlocks";
 import { WallBlockShape } from "./WallBlockShape";
 import { snapPosition } from "../lib/snapping";
 import { computeHiddenSegments, hiddenSegmentsForDivision, type HiddenSegment } from "../lib/adjacency";
 import { nearestSideAndOffset } from "../lib/nearestWall";
 import { collidingOpeningIds } from "../lib/collisions";
+import { freeWallIsHorizontal, freeWallLengthM } from "../lib/openings";
 import { ElementPalette } from "./ElementPalette";
-import type { Division, Opening, OpeningType, WallSide } from "../types/project";
+import type { Division, FreeWall, Opening, OpeningType, WallSide } from "../types/project";
 
 const PX_PER_METER = 30;
 const BASE_STAGE_WIDTH = 720;
@@ -69,6 +70,34 @@ function resizeHandlePosition(side: ResizeSide, widthPx: number, heightPx: numbe
       return { x: 0, y: midY };
   }
 }
+
+function freeWallGeometry(wall: FreeWall, thicknessPx: number) {
+  const isHorizontal = freeWallIsHorizontal(wall);
+  const lengthM = freeWallLengthM(wall);
+  const lengthPx = lengthM * PX_PER_METER;
+  const startX = Math.min(wall.x1, wall.x2);
+  const startY = Math.min(wall.y1, wall.y2);
+  const groupX = (isHorizontal ? startX * PX_PER_METER : wall.x1 * PX_PER_METER) - (isHorizontal ? 0 : thicknessPx / 2);
+  const groupY = (isHorizontal ? wall.y1 * PX_PER_METER : startY * PX_PER_METER) - (isHorizontal ? thicknessPx / 2 : 0);
+  return { isHorizontal, lengthM, lengthPx, groupX, groupY };
+}
+
+/** Distância (em metros) de um ponto ao segmento da parede livre, e a
+ * fracção t (0..1) ao longo do comprimento — usado para "atrair" um
+ * elemento largado perto de uma parede livre e calcular o offset certo. */
+function pointToWallProjection(px: number, py: number, wall: FreeWall) {
+  const dx = wall.x2 - wall.x1;
+  const dy = wall.y2 - wall.y1;
+  const lengthSq = dx * dx + dy * dy;
+  let t = lengthSq === 0 ? 0 : ((px - wall.x1) * dx + (py - wall.y1) * dy) / lengthSq;
+  t = Math.max(0, Math.min(1, t));
+  const projX = wall.x1 + t * dx;
+  const projY = wall.y1 + t * dy;
+  const distance = Math.hypot(px - projX, py - projY);
+  return { distance, t };
+}
+
+const FREE_WALL_ATTACH_THRESHOLD_M = 0.4;
 
 interface Editor2DProps {
   /** Quando true (ecrã inteiro), o canvas ocupa o espaço disponível em vez do tamanho fixo. */
@@ -131,6 +160,14 @@ export function Editor2D({ expanded = false }: Editor2DProps = {}) {
   const addOpening = useProjectStore((s) => s.addOpening);
   const updateOpening = useProjectStore((s) => s.updateOpening);
   const selectAllDivisions = useProjectStore((s) => s.selectAllDivisions);
+  const freeWalls = useProjectStore((s) => s.project.freeWalls);
+  const selectedFreeWallId = useProjectStore((s) => s.selectedFreeWallId);
+  const addFreeWall = useProjectStore((s) => s.addFreeWall);
+  const updateFreeWall = useProjectStore((s) => s.updateFreeWall);
+  const removeFreeWall = useProjectStore((s) => s.removeFreeWall);
+  const selectFreeWall = useProjectStore((s) => s.selectFreeWall);
+  const addFreeWallOpening = useProjectStore((s) => s.addFreeWallOpening);
+  const updateFreeWallOpening = useProjectStore((s) => s.updateFreeWallOpening);
   const [hoveredDivisionId, setHoveredDivisionId] = useState<string | null>(null);
 
   const clipboardRef = useRef<Division[]>([]);
@@ -144,7 +181,10 @@ export function Editor2D({ expanded = false }: Editor2DProps = {}) {
       const selectedIds = state.selectedDivisionIds;
       const mod = e.ctrlKey || e.metaKey;
 
-      if ((e.key === "Delete" || e.key === "Backspace") && selectedIds.length > 0) {
+      if ((e.key === "Delete" || e.key === "Backspace") && state.selectedFreeWallId) {
+        e.preventDefault();
+        removeFreeWall(state.selectedFreeWallId);
+      } else if ((e.key === "Delete" || e.key === "Backspace") && selectedIds.length > 0) {
         e.preventDefault();
         removeDivisions(selectedIds);
       } else if (mod && e.key.toLowerCase() === "c" && selectedIds.length > 0) {
@@ -161,7 +201,7 @@ export function Editor2D({ expanded = false }: Editor2DProps = {}) {
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [removeDivisions, pasteDivisions, selectAllDivisions]);
+  }, [removeDivisions, pasteDivisions, selectAllDivisions, removeFreeWall]);
 
   const prevBlockCounts = useRef<Map<string, number>>(new Map());
   const stageRef = useRef<Konva.Stage>(null);
@@ -199,27 +239,68 @@ export function Editor2D({ expanded = false }: Editor2DProps = {}) {
 
     function onDrop(e: DragEvent) {
       e.preventDefault();
-      const type = e.dataTransfer?.getData("application/x-kubata-opening") as OpeningType | "";
-      if (!type || !container) return;
+      if (!container) return;
       const rect = container.getBoundingClientRect();
       const worldM = {
         x: (e.clientX - rect.left - view.x) / view.scale / PX_PER_METER,
         y: (e.clientY - rect.top - view.y) / view.scale / PX_PER_METER,
       };
+
+      const isWall = e.dataTransfer?.getData("application/x-kubata-wall");
+      const type = e.dataTransfer?.getData("application/x-kubata-opening") as OpeningType | "";
+
+      // parede livre próxima do ponto: aberturas largadas perto de uma
+      // parede livre ligam-se a ela, independentemente de estarem ou não
+      // dentro de uma divisão (permite "conectar um balcão a uma parede nova")
+      if (type) {
+        let nearestWall: { wall: (typeof freeWalls)[number]; t: number; distance: number } | null = null;
+        for (const w of freeWalls) {
+          const { distance, t } = pointToWallProjection(worldM.x, worldM.y, w);
+          if (distance <= FREE_WALL_ATTACH_THRESHOLD_M && (!nearestWall || distance < nearestWall.distance)) {
+            nearestWall = { wall: w, t, distance };
+          }
+        }
+        if (nearestWall) {
+          const defaultWidth = DEFAULT_OPENING_WIDTH_M[type];
+          const lengthM = freeWallLengthM(nearestWall.wall);
+          const offsetM = Math.max(0, Math.min(nearestWall.t * lengthM - defaultWidth / 2, Math.max(0, lengthM - defaultWidth)));
+          addFreeWallOpening(nearestWall.wall.id, { type, side: "top", offsetM: round1(offsetM), widthM: defaultWidth });
+          selectFreeWall(nearestWall.wall.id);
+          return;
+        }
+      }
+
       const target = divisions.find(
         (d) => worldM.x >= d.x && worldM.x <= d.x + d.width && worldM.y >= d.y && worldM.y <= d.y + d.height,
       );
-      if (!target) return;
 
-      const defaultWidth = DEFAULT_OPENING_WIDTH_M[type];
-      const { side, offset } = nearestSideAndOffset(
-        { x: worldM.x - target.x, y: worldM.y - target.y },
-        target.width,
-        target.height,
-        defaultWidth,
-      );
-      addOpening(target.id, { type, side, offsetM: round1(offset), widthM: defaultWidth });
-      selectDivision(target.id);
+      if (type && target) {
+        const defaultWidth = DEFAULT_OPENING_WIDTH_M[type];
+        if (type === "balcao") {
+          // balcões podem ser largados livremente em qualquer ponto da
+          // divisão, não só presos a uma parede
+          const margin = 0.15;
+          const freeX = round1(Math.max(margin, Math.min(worldM.x - target.x, target.width - margin)));
+          const freeY = round1(Math.max(margin, Math.min(worldM.y - target.y, target.height - margin)));
+          addOpening(target.id, { type, side: "top", offsetM: 0, widthM: defaultWidth, freeX, freeY });
+        } else {
+          const { side, offset } = nearestSideAndOffset(
+            { x: worldM.x - target.x, y: worldM.y - target.y },
+            target.width,
+            target.height,
+            defaultWidth,
+          );
+          addOpening(target.id, { type, side, offsetM: round1(offset), widthM: defaultWidth });
+        }
+        selectDivision(target.id);
+        return;
+      }
+
+      if (isWall) {
+        const half = 1.5;
+        const x1 = Math.max(0, round1(worldM.x - half));
+        addFreeWall(x1, round1(worldM.y), round1(x1 + half * 2), round1(worldM.y));
+      }
     }
 
     const container_ = container;
@@ -229,7 +310,7 @@ export function Editor2D({ expanded = false }: Editor2DProps = {}) {
       container_.removeEventListener("dragover", onDragOver);
       container_.removeEventListener("drop", onDrop);
     };
-  }, [view, divisions, addOpening, selectDivision]);
+  }, [view, divisions, freeWalls, addOpening, selectDivision, addFreeWall, addFreeWallOpening, selectFreeWall]);
 
   const divisionsRender = useMemo(() => {
     const hidden = computeHiddenSegments(divisions);
@@ -425,9 +506,56 @@ export function Editor2D({ expanded = false }: Editor2DProps = {}) {
                   ))}
 
                   {d.openings.map((o) => {
-                    const r = openingMarkerRect(o, widthPx, heightPx, thicknessPx);
+                    const isFree = o.freeX !== undefined && o.freeY !== undefined;
                     const openingSelected = o.id === selectedOpeningId;
                     const hasCollision = colliding.has(o.id);
+
+                    if (isFree) {
+                      const size = Math.max(10, o.widthM * PX_PER_METER * 0.4);
+                      return (
+                        <Rect
+                          key={o.id}
+                          x={o.freeX! * PX_PER_METER - size / 2}
+                          y={o.freeY! * PX_PER_METER - size / 2}
+                          width={size}
+                          height={size}
+                          cornerRadius={3}
+                          fill={OPENING_FILL[o.type]}
+                          stroke={openingSelected ? "#ff3b8d" : "#3a2a1a"}
+                          strokeWidth={openingSelected ? 2 : 0.5}
+                          draggable
+                          onMouseEnter={(e) => {
+                            const stage = e.target.getStage();
+                            if (stage) stage.container().style.cursor = "grab";
+                          }}
+                          onMouseLeave={(e) => {
+                            const stage = e.target.getStage();
+                            if (stage) stage.container().style.cursor = "default";
+                          }}
+                          onClick={(e) => {
+                            e.cancelBubble = true;
+                            selectDivision(d.id);
+                            selectOpening(o.id);
+                          }}
+                          onDragStart={(e) => {
+                            e.cancelBubble = true;
+                          }}
+                          onDragEnd={(e) => {
+                            e.cancelBubble = true;
+                            const margin = 0.15;
+                            const freeX = round1(
+                              Math.max(margin, Math.min((e.target.x() + size / 2) / PX_PER_METER, d.width - margin)),
+                            );
+                            const freeY = round1(
+                              Math.max(margin, Math.min((e.target.y() + size / 2) / PX_PER_METER, d.height - margin)),
+                            );
+                            updateOpening(d.id, o.id, { freeX, freeY });
+                          }}
+                        />
+                      );
+                    }
+
+                    const r = openingMarkerRect(o, widthPx, heightPx, thicknessPx);
                     return (
                       <Rect
                         key={o.id}
@@ -600,6 +728,154 @@ export function Editor2D({ expanded = false }: Editor2DProps = {}) {
                           <Circle radius={9} fill="#2563eb" stroke="#fff" strokeWidth={1} />
                           <Text text="+" fontSize={14} fill="#fff" x={-4} y={-7} listening={false} />
                         </Group>
+                      );
+                    })}
+                </Group>
+              );
+            })}
+
+            {freeWalls.map((w) => {
+              const spec = resolveBlockSpec(w.blockSpecId, w.blockOverride);
+              const thicknessPx = Math.max(4, (spec.thicknessCm / 100) * PX_PER_METER);
+              const { isHorizontal, lengthPx, groupX, groupY } = freeWallGeometry(w, thicknessPx);
+              const openingRanges = w.openings.map((o) => ({ offsetPx: o.offsetM * PX_PER_METER, widthPx: o.widthM * PX_PER_METER }));
+              const blocks = generateFreeWallBlocks(lengthPx, spec, PX_PER_METER, openingRanges);
+              const selected = w.id === selectedFreeWallId;
+
+              return (
+                <Group key={w.id} x={groupX} y={groupY}>
+                  <Rect
+                    x={isHorizontal ? 0 : -2}
+                    y={isHorizontal ? -2 : 0}
+                    width={isHorizontal ? lengthPx : thicknessPx + 4}
+                    height={isHorizontal ? thicknessPx + 4 : lengthPx}
+                    fill="transparent"
+                    stroke={selected ? "#2563eb" : "transparent"}
+                    strokeWidth={selected ? 2 : 0}
+                    dash={selected ? [4, 3] : undefined}
+                    onClick={(e) => {
+                      e.cancelBubble = true;
+                      selectFreeWall(w.id);
+                    }}
+                  />
+                  {blocks.map((b, i) => (
+                    <WallBlockShape
+                      key={`${w.id}-${b.key}`}
+                      x={isHorizontal ? b.x : b.y}
+                      y={isHorizontal ? b.y : b.x}
+                      width={isHorizontal ? b.width : b.height}
+                      height={isHorizontal ? b.height : b.width}
+                      fill={w.wallColor ?? BLOCK_FILL[spec.category]}
+                      animate={false}
+                      delayMs={i * 4}
+                    />
+                  ))}
+
+                  {w.openings.map((o) => {
+                    const offsetPx = o.offsetM * PX_PER_METER;
+                    const widthPx = o.widthM * PX_PER_METER;
+                    const openingSelected = o.id === selectedOpeningId;
+                    return (
+                      <Rect
+                        key={o.id}
+                        x={isHorizontal ? offsetPx : 0}
+                        y={isHorizontal ? 0 : offsetPx}
+                        width={isHorizontal ? widthPx : thicknessPx}
+                        height={isHorizontal ? thicknessPx : widthPx}
+                        fill={OPENING_FILL[o.type]}
+                        stroke={openingSelected ? "#ff3b8d" : "#3a2a1a"}
+                        strokeWidth={openingSelected ? 2 : 0.5}
+                        draggable
+                        onMouseEnter={(e) => {
+                          const stage = e.target.getStage();
+                          if (stage) stage.container().style.cursor = "grab";
+                        }}
+                        onMouseLeave={(e) => {
+                          const stage = e.target.getStage();
+                          if (stage) stage.container().style.cursor = "default";
+                        }}
+                        onClick={(e) => {
+                          e.cancelBubble = true;
+                          selectFreeWall(w.id);
+                          selectOpening(o.id);
+                        }}
+                        onDragStart={(e) => {
+                          e.cancelBubble = true;
+                        }}
+                        onDragEnd={(e) => {
+                          e.cancelBubble = true;
+                          const raw = isHorizontal ? e.target.x() : e.target.y();
+                          const newOffsetM = round1(Math.max(0, Math.min(raw / PX_PER_METER, Math.max(0, freeWallLengthM(w) - o.widthM))));
+                          updateFreeWallOpening(w.id, o.id, { offsetM: newOffsetM });
+                        }}
+                      />
+                    );
+                  })}
+
+                  {selected &&
+                    (["start", "end"] as const).map((which) => {
+                      const pos = which === "start" ? { x: isHorizontal ? 0 : thicknessPx / 2, y: isHorizontal ? thicknessPx / 2 : 0 } : { x: isHorizontal ? lengthPx : thicknessPx / 2, y: isHorizontal ? thicknessPx / 2 : lengthPx };
+                      return (
+                        <Rect
+                          key={which}
+                          x={pos.x - 6}
+                          y={pos.y - 6}
+                          width={12}
+                          height={12}
+                          fill="#8a5a2b"
+                          opacity={0.8}
+                          cornerRadius={2}
+                          onMouseEnter={(e) => {
+                            const stage = e.target.getStage();
+                            if (stage) stage.container().style.cursor = isHorizontal ? "ew-resize" : "ns-resize";
+                          }}
+                          onMouseLeave={(e) => {
+                            const stage = e.target.getStage();
+                            if (stage) stage.container().style.cursor = "default";
+                          }}
+                          onMouseDown={(e) => {
+                            e.cancelBubble = true;
+                            const stage = stageRef.current;
+                            const p0 = stage?.getPointerPosition();
+                            if (!stage || !p0) return;
+                            const startWorldPx = { x: (p0.x - view.x) / view.scale, y: (p0.y - view.y) / view.scale };
+                            const start = { x1: w.x1, y1: w.y1, x2: w.x2, y2: w.y2 };
+                            const containerEl = stage.container();
+
+                            function onMove(ev: MouseEvent) {
+                              const rect = containerEl.getBoundingClientRect();
+                              const worldPx = {
+                                x: (ev.clientX - rect.left - view.x) / view.scale,
+                                y: (ev.clientY - rect.top - view.y) / view.scale,
+                              };
+                              const dxM = (worldPx.x - startWorldPx.x) / PX_PER_METER;
+                              const dyM = (worldPx.y - startWorldPx.y) / PX_PER_METER;
+                              const horizontal = Math.abs(dxM) >= Math.abs(dyM);
+                              let patch: Partial<FreeWall>;
+                              if (which === "start") {
+                                patch = horizontal
+                                  ? { x1: round1(start.x1 + dxM), y1: start.y2, y2: start.y2 }
+                                  : { y1: round1(start.y1 + dyM), x1: start.x2, x2: start.x2 };
+                              } else {
+                                patch = horizontal
+                                  ? { x2: round1(start.x2 + dxM), y2: start.y1, y1: start.y1 }
+                                  : { y2: round1(start.y2 + dyM), x2: start.x1, x1: start.x1 };
+                              }
+                              const nx1 = patch.x1 ?? start.x1;
+                              const ny1 = patch.y1 ?? start.y1;
+                              const nx2 = patch.x2 ?? start.x2;
+                              const ny2 = patch.y2 ?? start.y2;
+                              if (Math.abs(nx2 - nx1) + Math.abs(ny2 - ny1) < 0.3) return;
+                              updateFreeWall(w.id, patch);
+                            }
+                            function onUp() {
+                              window.removeEventListener("mousemove", onMove);
+                              window.removeEventListener("mouseup", onUp);
+                            }
+                            window.addEventListener("mousemove", onMove);
+                            window.addEventListener("mouseup", onUp);
+                          }}
+                        />
                       );
                     })}
                 </Group>

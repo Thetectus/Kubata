@@ -11,7 +11,9 @@ const TYPE_LABELS: Record<OpeningType, string> = { porta: "Porta", janela: "Jane
 
 export function DivisionProperties() {
   const divisions = useProjectStore((s) => s.project.divisions);
+  const freeWalls = useProjectStore((s) => s.project.freeWalls);
   const selectedDivisionIds = useProjectStore((s) => s.selectedDivisionIds);
+  const selectedFreeWallId = useProjectStore((s) => s.selectedFreeWallId);
   const selectedOpeningId = useProjectStore((s) => s.selectedOpeningId);
   const updateDivision = useProjectStore((s) => s.updateDivision);
   const updateDivisions = useProjectStore((s) => s.updateDivisions);
@@ -20,6 +22,9 @@ export function DivisionProperties() {
   const addOpening = useProjectStore((s) => s.addOpening);
   const removeOpening = useProjectStore((s) => s.removeOpening);
   const selectOpening = useProjectStore((s) => s.selectOpening);
+  const updateFreeWall = useProjectStore((s) => s.updateFreeWall);
+  const removeFreeWall = useProjectStore((s) => s.removeFreeWall);
+  const removeFreeWallOpening = useProjectStore((s) => s.removeFreeWallOpening);
 
   const [newSide, setNewSide] = useState<WallSide>("bottom");
   const [newType, setNewType] = useState<OpeningType>("porta");
@@ -27,12 +32,109 @@ export function DivisionProperties() {
   const [newWidth, setNewWidth] = useState(0.9);
 
   const division = divisions.find((d) => d.id === selectedDivisionIds[0]);
+  const freeWall = freeWalls.find((w) => w.id === selectedFreeWallId);
 
   function toggleOpenWall(side: WallSide) {
     if (!division) return;
     const current = division.openWalls ?? [];
     const openWalls = current.includes(side) ? current.filter((s) => s !== side) : [...current, side];
     updateDivision(division.id, { openWalls });
+  }
+
+  if (freeWall) {
+    const spec = resolveBlockSpec(freeWall.blockSpecId, freeWall.blockOverride);
+    const isCustom = Boolean(freeWall.blockOverride);
+    return (
+      <div style={{ minWidth: 260, fontSize: 14 }}>
+        <h2 style={{ fontSize: 16, marginBottom: 8 }}>Parede livre</h2>
+        <p style={{ fontSize: 12, color: "#888", marginBottom: 8 }}>
+          Muro/parede independente das divisões — arrasta as pontas dela no
+          desenho para a mover/esticar. Podes largar um balcão da paleta em
+          cima dela para o "conectar" à parede.
+        </p>
+
+        <label style={row}>
+          Nome
+          <input
+            type="text"
+            value={freeWall.label}
+            onChange={(e) => updateFreeWall(freeWall.id, { label: e.target.value })}
+            style={{ width: 140 }}
+          />
+        </label>
+        <label style={row}>
+          Pé-direito / altura da parede (m)
+          <input
+            type="number"
+            step={0.1}
+            value={freeWall.wallHeightM}
+            onChange={(e) => updateFreeWall(freeWall.id, { wallHeightM: e.target.valueAsNumber || freeWall.wallHeightM })}
+          />
+        </label>
+        <label style={row}>
+          Tipo de bloco/tijolo
+          <select
+            value={freeWall.blockSpecId}
+            onChange={(e) => updateFreeWall(freeWall.id, { blockSpecId: e.target.value, blockOverride: undefined })}
+          >
+            {BLOCK_CATALOG.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <p style={{ fontSize: 12, color: "#888", margin: "4px 0" }}>
+          Dimensão do bloco (comprimento × altura × espessura, cm){" "}
+          {isCustom && <strong>— personalizada</strong>}
+        </p>
+        <div style={{ display: "flex", gap: 6 }}>
+          <DimInput
+            label="Compr."
+            value={spec.lengthCm}
+            onChange={(v) => updateFreeWall(freeWall.id, { blockOverride: { ...freeWall.blockOverride, lengthCm: v } })}
+          />
+          <DimInput
+            label="Altura"
+            value={spec.heightCm}
+            onChange={(v) => updateFreeWall(freeWall.id, { blockOverride: { ...freeWall.blockOverride, heightCm: v } })}
+          />
+          <DimInput
+            label="Espess."
+            value={spec.thicknessCm}
+            onChange={(v) => updateFreeWall(freeWall.id, { blockOverride: { ...freeWall.blockOverride, thicknessCm: v } })}
+          />
+        </div>
+
+        <label style={{ ...row, marginTop: 8 }}>
+          Cor da parede / acabamento
+          <input
+            type="color"
+            value={freeWall.wallColor ?? "#b7b0a3"}
+            onChange={(e) => updateFreeWall(freeWall.id, { wallColor: e.target.value })}
+          />
+        </label>
+
+        <h3 style={{ fontSize: 14, margin: "12px 0 6px" }}>Balcões nesta parede</h3>
+        {freeWall.openings.length === 0 && <p style={{ fontSize: 12, color: "#888" }}>Nenhum ainda.</p>}
+        <div style={{ marginBottom: 6 }}>
+          {freeWall.openings.map((o) => (
+            <div key={o.id} style={{ ...row, fontSize: 12 }}>
+              <span>
+                {TYPE_LABELS[o.type]} — {o.widthM}m (a {o.offsetM}m do início)
+              </span>
+              <button type="button" onClick={() => removeFreeWallOpening(freeWall.id, o.id)} aria-label="Remover abertura">
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+
+        <button type="button" onClick={() => removeFreeWall(freeWall.id)} style={{ marginTop: 16, color: "#b91c1c" }}>
+          Remover parede
+        </button>
+      </div>
+    );
   }
 
   if (selectedDivisionIds.length > 1) {
@@ -350,7 +452,10 @@ export function DivisionProperties() {
             >
               <span>
                 {hasCollision && "⚠ "}
-                {TYPE_LABELS[o.type]} — lado {SIDE_LABELS[o.side]}, {o.widthM}m (a {o.offsetM}m do canto)
+                {TYPE_LABELS[o.type]} —{" "}
+                {o.freeX !== undefined && o.freeY !== undefined
+                  ? `livre, a (${o.freeX}m, ${o.freeY}m)`
+                  : `lado ${SIDE_LABELS[o.side]}, ${o.widthM}m (a ${o.offsetM}m do canto)`}
               </span>
               <button
                 type="button"
