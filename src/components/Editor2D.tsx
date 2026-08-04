@@ -15,8 +15,10 @@ import { ElementPalette } from "./ElementPalette";
 import type { Division, FreeWall, Opening, OpeningType, WallSide } from "../types/project";
 
 const PX_PER_METER = 30;
-const BASE_STAGE_WIDTH = 720;
-const BASE_STAGE_HEIGHT = 520;
+// Tamanho "médio" — igual ao da pré-visualização 3D, para os dois
+// ecrãs serem consistentes por defeito, um por cima do outro.
+const BASE_STAGE_WIDTH = 900;
+const BASE_STAGE_HEIGHT = 620;
 const MIN_SCALE = 0.15;
 const MAX_SCALE = 3;
 const SNAP_THRESHOLD_PX = 8;

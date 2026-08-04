@@ -16,8 +16,8 @@ const CATEGORY_COLOR: Record<string, string> = {
 
 type PreviewSize = "normal" | "medium" | "full";
 
-// Tamanho "normal" igual ao do canvas 2D por defeito (720×520) — para os
-// dois ecrãs terem peso visual semelhante lado a lado.
+// "Médio" é o tamanho por defeito (igual ao do canvas 2D, 900×620) —
+// os dois ecrãs ficam consistentes, um por cima do outro.
 const SIZE_DIMENSIONS: Record<Exclude<PreviewSize, "full">, { width: number; height: number }> = {
   normal: { width: 720, height: 520 },
   medium: { width: 900, height: 620 },
@@ -91,7 +91,7 @@ export function Preview3D() {
   const divisions = useProjectStore((s) => s.project.divisions);
   const freeWalls = useProjectStore((s) => s.project.freeWalls);
   const containerRef = useRef<HTMLDivElement>(null);
-  const [size, setSize] = useState<PreviewSize>("normal");
+  const [size, setSize] = useState<PreviewSize>("medium");
   const [preparingFull, setPreparingFull] = useState(false);
 
   useEffect(() => {

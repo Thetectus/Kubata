@@ -92,7 +92,7 @@ function App() {
   }
 
   return (
-    <div style={{ maxWidth: 1680, margin: "0 auto", padding: 24, fontFamily: "sans-serif" }}>
+    <div style={{ maxWidth: 1000, margin: "0 auto", padding: 24, fontFamily: "sans-serif" }}>
       {splashVisible && <LoadingScreen fadingOut={splashFadingOut} />}
       <header style={{ marginBottom: 16, display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
         <div>
@@ -162,38 +162,50 @@ function App() {
 
       <div
         ref={workspaceRef}
-        style={{
-          display: "flex",
-          gap: 24,
-          flexWrap: isFullscreen ? "nowrap" : "wrap",
-          justifyContent: "center",
-          alignItems: "flex-start",
-          background: isFullscreen ? "#ffffff" : undefined,
-          padding: isFullscreen ? 24 : undefined,
-          overflow: isFullscreen ? "auto" : undefined,
-          width: isFullscreen ? "100%" : undefined,
-          height: isFullscreen ? "100%" : undefined,
-          boxSizing: "border-box",
-        }}
+        style={
+          isFullscreen
+            ? {
+                display: "flex",
+                gap: 24,
+                flexWrap: "nowrap",
+                alignItems: "flex-start",
+                background: "#ffffff",
+                padding: 24,
+                overflow: "auto",
+                width: "100%",
+                height: "100%",
+                boxSizing: "border-box",
+              }
+            : { display: "flex", flexDirection: "column", gap: 24, alignItems: "center" }
+        }
       >
-        {/* coluna esquerda: plano de construção + (opcional) 3D por baixo —
-            estrutura fixa em vez de deixar o flex-wrap decidir onde cada
-            painel cai, que produzia colunas desalinhadas consoante o 3D
-            estava ligado ou não. */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-          <Editor2D expanded={isFullscreen} />
-          {!isFullscreen && show3D && (
-            <Suspense fallback={<p style={{ fontSize: 13, color: "#888" }}>A carregar 3D…</p>}>
-              <Preview3D />
-            </Suspense>
-          )}
-        </div>
-
-        <div style={{ display: "flex", flexDirection: "column", gap: 20, width: 380, flex: "0 0 380px" }}>
-          {AI_GENERATE_ENABLED && <AiGenerate />}
-          <DivisionProperties />
-          <MaterialsPanel />
-        </div>
+        {isFullscreen ? (
+          <>
+            <Editor2D expanded />
+            <div style={{ display: "flex", flexDirection: "column", gap: 20, width: 380, flex: "0 0 380px" }}>
+              {AI_GENERATE_ENABLED && <AiGenerate />}
+              <DivisionProperties />
+              <MaterialsPanel />
+            </div>
+          </>
+        ) : (
+          // uma só coluna, empilhada e centrada: canvas 2D, depois (opcional)
+          // 3D, e só depois propriedades/materiais — evita ter duas colunas
+          // lado a lado a desalinhar consoante o que está ligado ou não.
+          <>
+            <Editor2D />
+            {show3D && (
+              <Suspense fallback={<p style={{ fontSize: 13, color: "#888" }}>A carregar 3D…</p>}>
+                <Preview3D />
+              </Suspense>
+            )}
+            <div style={{ display: "flex", flexDirection: "column", gap: 20, width: 900, maxWidth: "100%" }}>
+              {AI_GENERATE_ENABLED && <AiGenerate />}
+              <DivisionProperties />
+              <MaterialsPanel />
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
