@@ -32,7 +32,16 @@ export function ElementPalette() {
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        style={{ border: "none", background: "transparent", padding: "6px 10px", fontSize: 12, cursor: "pointer" }}
+        style={{
+          border: "none",
+          background: "var(--accent)",
+          color: "#fff",
+          fontWeight: 700,
+          padding: "7px 12px",
+          fontSize: 12,
+          cursor: "pointer",
+          borderRadius: open ? "8px 8px 0 0" : 8,
+        }}
       >
         + Elementos
       </button>

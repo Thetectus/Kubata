@@ -89,6 +89,18 @@ h2 {
     font-size: 20px;
   }
 }
+/* h3 herdava a cor cinzenta do corpo de texto (var(--text)), ficando
+   quase impossível de distinguir de um parágrafo de ajuda — títulos de
+   secção (Paredes, Portas/janelas/balcões, Materiais…) precisam de
+   contraste claro em relação ao texto informativo à volta. */
+h3 {
+  font-family: var(--heading);
+  font-weight: 700;
+  color: var(--text-h);
+  letter-spacing: -0.1px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
 p {
   margin: 0;
 }
@@ -169,4 +181,17 @@ input[type="color"] {
   border: 1px solid var(--border);
   background: var(--bg);
   cursor: pointer;
+}
+
+table th {
+  font-weight: 700;
+  color: var(--text-h);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  padding: 6px 8px 8px 0;
+}
+table td {
+  padding: 6px 8px 6px 0;
+  color: var(--text-h);
 }

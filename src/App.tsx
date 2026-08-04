@@ -5,6 +5,7 @@ import { MaterialsPanel } from "./components/MaterialsPanel";
 import { DivisionProperties } from "./components/DivisionProperties";
 import { AiGenerate } from "./components/AiGenerate";
 import { LoadingScreen } from "./components/LoadingScreen";
+import { totalCost, totalWallAreaM2 } from "./lib/materials";
 import type { Project } from "./types/project";
 
 // Escondido até haver ANTHROPIC_API_KEY configurada no Vercel (custo por
@@ -26,10 +27,16 @@ const KIND_LABELS: Record<Project["kind"], string> = {
 
 function App() {
   const project = useProjectStore((s) => s.project);
+  const materials = useProjectStore((s) => s.materials);
+  const pastLength = useProjectStore((s) => s.past.length);
   const addDivision = useProjectStore((s) => s.addDivision);
+  const undo = useProjectStore((s) => s.undo);
   const newProjectFromTemplate = useProjectStore((s) => s.newProjectFromTemplate);
   const updateProjectMeta = useProjectStore((s) => s.updateProjectMeta);
   const hydrate = useProjectStore((s) => s.hydrate);
+
+  const totalArea = totalWallAreaM2(project.divisions, project.freeWalls);
+  const grandTotal = totalCost(materials, totalArea);
 
   const [ready, setReady] = useState(false);
   const [show3D, setShow3D] = useState(true);
@@ -141,9 +148,12 @@ function App() {
         </span>
       </header>
 
-      <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
         <button type="button" className="btn-primary" onClick={addDivision} disabled={!ready}>
           + Adicionar divisão
+        </button>
+        <button type="button" onClick={undo} disabled={pastLength === 0} title="Desfaz a última alteração (Ctrl+Z)">
+          ↩ Desfazer
         </button>
         {!isFullscreen && (
           <button type="button" onClick={() => setShow3D((v) => !v)}>
@@ -158,12 +168,15 @@ function App() {
       <div
         ref={workspaceRef}
         style={{
+          position: "relative",
           display: "flex",
           gap: 24,
           flexWrap: isFullscreen ? "nowrap" : "wrap",
+          justifyContent: isFullscreen ? "flex-start" : "center",
           alignItems: "flex-start",
           background: isFullscreen ? "#ffffff" : undefined,
           padding: isFullscreen ? 24 : undefined,
+          paddingBottom: 56,
           overflow: isFullscreen ? "auto" : undefined,
           width: isFullscreen ? "100%" : undefined,
           height: isFullscreen ? "100%" : undefined,
@@ -189,6 +202,23 @@ function App() {
             <MaterialsPanel />
           </>
         )}
+
+        <div
+          style={{
+            position: "absolute",
+            bottom: 12,
+            right: 12,
+            background: "var(--accent)",
+            color: "#fff",
+            padding: "8px 14px",
+            borderRadius: 8,
+            fontSize: 13,
+            fontWeight: 700,
+            boxShadow: "0 4px 10px rgba(0,0,0,0.18)",
+          }}
+        >
+          Total da obra: {Math.round(grandTotal).toLocaleString("pt-PT")} Kz
+        </div>
       </div>
     </div>
   );

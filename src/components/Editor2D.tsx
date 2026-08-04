@@ -197,6 +197,9 @@ export function Editor2D({ expanded = false }: Editor2DProps = {}) {
       } else if (mod && e.key.toLowerCase() === "a") {
         e.preventDefault();
         selectAllDivisions();
+      } else if (mod && e.key.toLowerCase() === "z") {
+        e.preventDefault();
+        state.undo();
       }
     }
     window.addEventListener("keydown", onKeyDown);
@@ -608,6 +611,133 @@ export function Editor2D({ expanded = false }: Editor2DProps = {}) {
                     );
                   })}
 
+                  {/* alças de largura das aberturas: só quando seleccionada, uma em cada ponta */}
+                  {d.openings
+                    .filter((o) => o.id === selectedOpeningId && o.freeX === undefined)
+                    .map((o) => {
+                      const r = openingMarkerRect(o, widthPx, heightPx, thicknessPx);
+                      const horizontal = o.side === "top" || o.side === "bottom";
+                      const sideLenPx = horizontal ? widthPx : heightPx;
+                      const handles = horizontal
+                        ? [
+                            { key: "start", x: r.x, y: r.y + r.height / 2, cursor: "ew-resize" },
+                            { key: "end", x: r.x + r.width, y: r.y + r.height / 2, cursor: "ew-resize" },
+                          ]
+                        : [
+                            { key: "start", x: r.x + r.width / 2, y: r.y, cursor: "ns-resize" },
+                            { key: "end", x: r.x + r.width / 2, y: r.y + r.height, cursor: "ns-resize" },
+                          ];
+                      return handles.map((h) => (
+                        <Rect
+                          key={`${o.id}-${h.key}`}
+                          x={h.x - 5}
+                          y={h.y - 5}
+                          width={10}
+                          height={10}
+                          fill="#ff3b8d"
+                          cornerRadius={2}
+                          onMouseEnter={(e) => {
+                            const stage = e.target.getStage();
+                            if (stage) stage.container().style.cursor = h.cursor;
+                          }}
+                          onMouseLeave={(e) => {
+                            const stage = e.target.getStage();
+                            if (stage) stage.container().style.cursor = "default";
+                          }}
+                          onMouseDown={(e) => {
+                            e.cancelBubble = true;
+                            const startOffsetM = o.offsetM;
+                            const startWidthM = o.widthM;
+                            const stage = stageRef.current;
+                            if (!stage) return;
+                            const containerEl = stage.container();
+
+                            function onMove(ev: MouseEvent) {
+                              const rect = containerEl.getBoundingClientRect();
+                              const worldPx = {
+                                x: (ev.clientX - rect.left - view.x) / view.scale,
+                                y: (ev.clientY - rect.top - view.y) / view.scale,
+                              };
+                              const rel = { x: worldPx.x - d.x * PX_PER_METER, y: worldPx.y - d.y * PX_PER_METER };
+                              const alongPx = horizontal ? rel.x : rel.y;
+                              let newOffsetM: number;
+                              let newWidthM: number;
+                              if (h.key === "start") {
+                                const fixedEndM = (startOffsetM + startWidthM);
+                                newOffsetM = Math.max(0, Math.min(alongPx / PX_PER_METER, fixedEndM - 0.2));
+                                newWidthM = fixedEndM - newOffsetM;
+                              } else {
+                                newOffsetM = startOffsetM;
+                                const maxWidthM = sideLenPx / PX_PER_METER - startOffsetM;
+                                newWidthM = Math.max(0.2, Math.min(alongPx / PX_PER_METER - startOffsetM, maxWidthM));
+                              }
+                              updateOpening(d.id, o.id, { offsetM: round1(newOffsetM), widthM: round1(newWidthM) });
+                            }
+                            function onUp() {
+                              window.removeEventListener("mousemove", onMove);
+                              window.removeEventListener("mouseup", onUp);
+                            }
+                            window.addEventListener("mousemove", onMove);
+                            window.addEventListener("mouseup", onUp);
+                          }}
+                        />
+                      ));
+                    })}
+
+                  {/* alça de tamanho do balcão livre: um canto, redimensiona o marcador */}
+                  {d.openings
+                    .filter((o) => o.id === selectedOpeningId && o.freeX !== undefined && o.freeY !== undefined)
+                    .map((o) => {
+                      const size = Math.max(10, o.widthM * PX_PER_METER * 0.4);
+                      const cx = o.freeX! * PX_PER_METER;
+                      const cy = o.freeY! * PX_PER_METER;
+                      const hx = cx + size / 2;
+                      const hy = cy + size / 2;
+                      return (
+                        <Rect
+                          key={`${o.id}-size`}
+                          x={hx - 5}
+                          y={hy - 5}
+                          width={10}
+                          height={10}
+                          fill="#ff3b8d"
+                          cornerRadius={2}
+                          onMouseEnter={(e) => {
+                            const stage = e.target.getStage();
+                            if (stage) stage.container().style.cursor = "nwse-resize";
+                          }}
+                          onMouseLeave={(e) => {
+                            const stage = e.target.getStage();
+                            if (stage) stage.container().style.cursor = "default";
+                          }}
+                          onMouseDown={(e) => {
+                            e.cancelBubble = true;
+                            const stage = stageRef.current;
+                            if (!stage) return;
+                            const containerEl = stage.container();
+
+                            function onMove(ev: MouseEvent) {
+                              const rect = containerEl.getBoundingClientRect();
+                              const worldPx = {
+                                x: (ev.clientX - rect.left - view.x) / view.scale,
+                                y: (ev.clientY - rect.top - view.y) / view.scale,
+                              };
+                              const rel = { x: worldPx.x - d.x * PX_PER_METER, y: worldPx.y - d.y * PX_PER_METER };
+                              const distPx = Math.max(rel.x - cx, rel.y - cy) * 2;
+                              const newWidthM = Math.max(0.2, Math.min(distPx / PX_PER_METER / 0.4, 4));
+                              updateOpening(d.id, o.id, { widthM: round1(newWidthM) });
+                            }
+                            function onUp() {
+                              window.removeEventListener("mousemove", onMove);
+                              window.removeEventListener("mouseup", onUp);
+                            }
+                            window.addEventListener("mousemove", onMove);
+                            window.addEventListener("mouseup", onUp);
+                          }}
+                        />
+                      );
+                    })}
+
                   <Text
                     text={`${d.label}\n${d.width}m × ${d.height}m`}
                     fontSize={12}
@@ -812,6 +942,77 @@ export function Editor2D({ expanded = false }: Editor2DProps = {}) {
                     );
                   })}
 
+                  {/* alças de largura das aberturas da parede livre: só quando seleccionada */}
+                  {w.openings
+                    .filter((o) => o.id === selectedOpeningId)
+                    .flatMap((o) => {
+                      const offsetPx = o.offsetM * PX_PER_METER;
+                      const widthPxO = o.widthM * PX_PER_METER;
+                      const startPos = isHorizontal ? { x: offsetPx, y: thicknessPx / 2 } : { x: thicknessPx / 2, y: offsetPx };
+                      const endPos = isHorizontal
+                        ? { x: offsetPx + widthPxO, y: thicknessPx / 2 }
+                        : { x: thicknessPx / 2, y: offsetPx + widthPxO };
+                      return (["start", "end"] as const).map((which) => {
+                        const pos = which === "start" ? startPos : endPos;
+                        return (
+                          <Rect
+                            key={`${o.id}-${which}`}
+                            x={pos.x - 5}
+                            y={pos.y - 5}
+                            width={10}
+                            height={10}
+                            fill="#ff3b8d"
+                            cornerRadius={2}
+                            onMouseEnter={(e) => {
+                              const stage = e.target.getStage();
+                              if (stage) stage.container().style.cursor = isHorizontal ? "ew-resize" : "ns-resize";
+                            }}
+                            onMouseLeave={(e) => {
+                              const stage = e.target.getStage();
+                              if (stage) stage.container().style.cursor = "default";
+                            }}
+                            onMouseDown={(e) => {
+                              e.cancelBubble = true;
+                              const startOffsetM = o.offsetM;
+                              const startWidthM = o.widthM;
+                              const stage = stageRef.current;
+                              if (!stage) return;
+                              const containerEl = stage.container();
+
+                              function onMove(ev: MouseEvent) {
+                                const rect = containerEl.getBoundingClientRect();
+                                const worldPx = {
+                                  x: (ev.clientX - rect.left - view.x) / view.scale,
+                                  y: (ev.clientY - rect.top - view.y) / view.scale,
+                                };
+                                const rel = { x: worldPx.x - groupX, y: worldPx.y - groupY };
+                                const alongPx = isHorizontal ? rel.x : rel.y;
+                                const lengthM = freeWallLengthM(w);
+                                let newOffsetM: number;
+                                let newWidthM: number;
+                                if (which === "start") {
+                                  const fixedEndM = startOffsetM + startWidthM;
+                                  newOffsetM = Math.max(0, Math.min(alongPx / PX_PER_METER, fixedEndM - 0.2));
+                                  newWidthM = fixedEndM - newOffsetM;
+                                } else {
+                                  newOffsetM = startOffsetM;
+                                  const maxWidthM = lengthM - startOffsetM;
+                                  newWidthM = Math.max(0.2, Math.min(alongPx / PX_PER_METER - startOffsetM, maxWidthM));
+                                }
+                                updateFreeWallOpening(w.id, o.id, { offsetM: round1(newOffsetM), widthM: round1(newWidthM) });
+                              }
+                              function onUp() {
+                                window.removeEventListener("mousemove", onMove);
+                                window.removeEventListener("mouseup", onUp);
+                              }
+                              window.addEventListener("mousemove", onMove);
+                              window.addEventListener("mouseup", onUp);
+                            }}
+                          />
+                        );
+                      });
+                    })}
+
                   {selected &&
                     (["start", "end"] as const).map((which) => {
                       const pos = which === "start" ? { x: isHorizontal ? 0 : thicknessPx / 2, y: isHorizontal ? thicknessPx / 2 : 0 } : { x: isHorizontal ? lengthPx : thicknessPx / 2, y: isHorizontal ? thicknessPx / 2 : lengthPx };
@@ -905,8 +1106,9 @@ export function Editor2D({ expanded = false }: Editor2DProps = {}) {
       </div>
       <p style={{ fontSize: 11, color: "#888", marginTop: 4 }}>
         Shift+clique selecciona várias divisões · Delete apaga · Ctrl+C/Ctrl+V
-        copia/cola · Ctrl+A selecciona todas. Selecciona uma só para veres os
-        botões "+" à volta (cria divisão igual encostada a esse lado).
+        copia/cola · Ctrl+A selecciona todas · Ctrl+Z desfaz. Selecciona uma
+        só para veres os botões "+" à volta (cria divisão igual encostada a
+        esse lado).
       </p>
     </div>
   );
