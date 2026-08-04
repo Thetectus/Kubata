@@ -5,7 +5,6 @@ import { MaterialsPanel } from "./components/MaterialsPanel";
 import { DivisionProperties } from "./components/DivisionProperties";
 import { AiGenerate } from "./components/AiGenerate";
 import { LoadingScreen } from "./components/LoadingScreen";
-import { totalCost, totalWallAreaM2 } from "./lib/materials";
 import type { Project } from "./types/project";
 
 // Escondido até haver ANTHROPIC_API_KEY configurada no Vercel (custo por
@@ -27,16 +26,12 @@ const KIND_LABELS: Record<Project["kind"], string> = {
 
 function App() {
   const project = useProjectStore((s) => s.project);
-  const materials = useProjectStore((s) => s.materials);
   const pastLength = useProjectStore((s) => s.past.length);
   const addDivision = useProjectStore((s) => s.addDivision);
   const undo = useProjectStore((s) => s.undo);
   const newProjectFromTemplate = useProjectStore((s) => s.newProjectFromTemplate);
   const updateProjectMeta = useProjectStore((s) => s.updateProjectMeta);
   const hydrate = useProjectStore((s) => s.hydrate);
-
-  const totalArea = totalWallAreaM2(project.divisions, project.freeWalls);
-  const grandTotal = totalCost(materials, totalArea);
 
   const [ready, setReady] = useState(false);
   const [show3D, setShow3D] = useState(true);
@@ -168,56 +163,36 @@ function App() {
       <div
         ref={workspaceRef}
         style={{
-          position: "relative",
           display: "flex",
           gap: 24,
           flexWrap: isFullscreen ? "nowrap" : "wrap",
-          justifyContent: isFullscreen ? "flex-start" : "center",
+          justifyContent: "center",
           alignItems: "flex-start",
           background: isFullscreen ? "#ffffff" : undefined,
           padding: isFullscreen ? 24 : undefined,
-          paddingBottom: 56,
           overflow: isFullscreen ? "auto" : undefined,
           width: isFullscreen ? "100%" : undefined,
           height: isFullscreen ? "100%" : undefined,
           boxSizing: "border-box",
         }}
       >
-        <Editor2D expanded={isFullscreen} />
-        {isFullscreen ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: 20, width: 380, flex: "0 0 380px" }}>
-            <DivisionProperties />
-            {AI_GENERATE_ENABLED && <AiGenerate />}
-            <MaterialsPanel />
-          </div>
-        ) : (
-          <>
-            {AI_GENERATE_ENABLED && <AiGenerate />}
-            {show3D && (
-              <Suspense fallback={<p style={{ fontSize: 13, color: "#888" }}>A carregar 3D…</p>}>
-                <Preview3D />
-              </Suspense>
-            )}
-            <DivisionProperties />
-            <MaterialsPanel />
-          </>
-        )}
+        {/* coluna esquerda: plano de construção + (opcional) 3D por baixo —
+            estrutura fixa em vez de deixar o flex-wrap decidir onde cada
+            painel cai, que produzia colunas desalinhadas consoante o 3D
+            estava ligado ou não. */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+          <Editor2D expanded={isFullscreen} />
+          {!isFullscreen && show3D && (
+            <Suspense fallback={<p style={{ fontSize: 13, color: "#888" }}>A carregar 3D…</p>}>
+              <Preview3D />
+            </Suspense>
+          )}
+        </div>
 
-        <div
-          style={{
-            position: "absolute",
-            bottom: 12,
-            right: 12,
-            background: "var(--accent)",
-            color: "#fff",
-            padding: "8px 14px",
-            borderRadius: 8,
-            fontSize: 13,
-            fontWeight: 700,
-            boxShadow: "0 4px 10px rgba(0,0,0,0.18)",
-          }}
-        >
-          Total da obra: {Math.round(grandTotal).toLocaleString("pt-PT")} Kz
+        <div style={{ display: "flex", flexDirection: "column", gap: 20, width: 380, flex: "0 0 380px" }}>
+          {AI_GENERATE_ENABLED && <AiGenerate />}
+          <DivisionProperties />
+          <MaterialsPanel />
         </div>
       </div>
     </div>

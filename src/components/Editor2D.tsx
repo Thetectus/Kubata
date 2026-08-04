@@ -10,6 +10,7 @@ import { computeHiddenSegments, hiddenSegmentsForDivision, type HiddenSegment } 
 import { nearestSideAndOffset } from "../lib/nearestWall";
 import { collidingOpeningIds } from "../lib/collisions";
 import { freeWallIsHorizontal, freeWallLengthM } from "../lib/openings";
+import { totalCost, totalWallAreaM2 } from "../lib/materials";
 import { ElementPalette } from "./ElementPalette";
 import type { Division, FreeWall, Opening, OpeningType, WallSide } from "../types/project";
 
@@ -161,6 +162,7 @@ export function Editor2D({ expanded = false }: Editor2DProps = {}) {
   const updateOpening = useProjectStore((s) => s.updateOpening);
   const selectAllDivisions = useProjectStore((s) => s.selectAllDivisions);
   const freeWalls = useProjectStore((s) => s.project.freeWalls);
+  const materials = useProjectStore((s) => s.materials);
   const selectedFreeWallId = useProjectStore((s) => s.selectedFreeWallId);
   const addFreeWall = useProjectStore((s) => s.addFreeWall);
   const updateFreeWall = useProjectStore((s) => s.updateFreeWall);
@@ -401,6 +403,9 @@ export function Editor2D({ expanded = false }: Editor2DProps = {}) {
     });
   }
 
+  const totalArea = totalWallAreaM2(divisions, freeWalls);
+  const grandTotal = totalCost(materials, totalArea);
+
   return (
     <div ref={containerRef} style={{ flex: expanded ? "1 1 auto" : undefined, minWidth: 0 }}>
       <div style={{ display: "flex", gap: 6, marginBottom: 6, flexWrap: "wrap", alignItems: "center" }}>
@@ -425,6 +430,24 @@ export function Editor2D({ expanded = false }: Editor2DProps = {}) {
 
       <div style={{ position: "relative", width: STAGE_WIDTH }}>
         <ElementPalette />
+        <div
+          style={{
+            position: "absolute",
+            bottom: 10,
+            right: 10,
+            zIndex: 2,
+            background: "var(--accent)",
+            color: "#fff",
+            padding: "7px 12px",
+            borderRadius: 8,
+            fontSize: 12,
+            fontWeight: 700,
+            boxShadow: "0 4px 10px rgba(0,0,0,0.18)",
+            pointerEvents: "none",
+          }}
+        >
+          Total da obra: {Math.round(grandTotal).toLocaleString("pt-PT")} Kz
+        </div>
         <Stage
           ref={stageRef}
           width={STAGE_WIDTH}
