@@ -1,5 +1,5 @@
 :root {
-  --text: #6b6375;
+  --text: #4a4550;
   --text-h: #08060d;
   --bg: #fff;
   --border: #e5e4e7;
@@ -194,4 +194,22 @@ table th {
 table td {
   padding: 6px 8px 6px 0;
   color: var(--text-h);
+}
+
+/* Campos editáveis dentro de tabelas (preços, quantidades…): sempre um
+   azul muito claro com letra preta, independente do tema claro/escuro
+   — mais fáceis de distinguir como "editáveis" do que o resto da tabela,
+   e sem o fundo quase preto que o modo escuro do browser lhes dava. */
+table input[type="text"],
+table input[type="number"],
+table select {
+  background: #eaf3ff;
+  color: #14161a;
+  border: 1px solid #b9d7f7;
+}
+table input[type="text"]:focus,
+table input[type="number"]:focus,
+table select:focus {
+  outline: 2px solid var(--accent-border);
+  background: #ddebfd;
 }
