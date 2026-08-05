@@ -169,7 +169,7 @@ function App() {
                 gap: 24,
                 flexWrap: "nowrap",
                 alignItems: "flex-start",
-                background: "#ffffff",
+                background: "var(--bg)",
                 padding: 24,
                 overflow: "auto",
                 width: "100%",
