@@ -47,7 +47,7 @@ export function ElementPalette() {
       </button>
       {open && (
         <div style={{ padding: "0 8px 8px", display: "flex", flexDirection: "column", gap: 6, width: 190 }}>
-          <p style={{ fontSize: 10, color: "#888", margin: "0 0 2px" }}>
+          <p style={{ fontSize: 10, color: "var(--text)", margin: "0 0 2px" }}>
             Arrasta para uma divisão (ou para o fundo vazio, no caso da parede)
           </p>
           {OPENING_ITEMS.map((item) => (

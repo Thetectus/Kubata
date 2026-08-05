@@ -18,6 +18,12 @@ export interface Opening {
    * compatibilidade de tipos). Não é descontada de nenhuma parede.  */
   freeX?: number;
   freeY?: number;
+  /** largura/altura do rectângulo livre (metros), medidas a partir de
+   * (freeX,freeY) como canto superior esquerdo — só usadas quando
+   * freeX/freeY estão definidos. Permite redimensionar em qualquer
+   * direcção, tal como uma divisão. */
+  freeWidthM?: number;
+  freeHeightM?: number;
 }
 
 /** Parede livre/independente — não pertence a nenhuma divisão, serve

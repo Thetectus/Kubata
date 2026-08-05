@@ -183,7 +183,7 @@ export function Preview3D() {
           <OrbitControls target={[center.x, 1.5, center.z]} />
         </Canvas>
       </div>
-      <p style={{ fontSize: 12, color: "#888", marginTop: 6 }}>
+      <p style={{ fontSize: 12, color: "var(--text)", marginTop: 6 }}>
         Arrasta para rodar, roda o rato para aproximar. Vista de maquete —
         sem texturas nem mobiliário.
       </p>

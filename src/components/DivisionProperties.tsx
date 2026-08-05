@@ -47,7 +47,7 @@ export function DivisionProperties() {
     return (
       <div style={{ minWidth: 260, fontSize: 14 }}>
         <h2 style={{ fontSize: 16, marginBottom: 8 }}>Parede livre</h2>
-        <p style={{ fontSize: 12, color: "#888", marginBottom: 8 }}>
+        <p style={{ fontSize: 12, color: "var(--text)", marginBottom: 8 }}>
           Muro/parede independente das divisões — arrasta as pontas dela no
           desenho para a mover/esticar. Podes largar um balcão da paleta em
           cima dela para o "conectar" à parede.
@@ -84,7 +84,7 @@ export function DivisionProperties() {
             ))}
           </select>
         </label>
-        <p style={{ fontSize: 12, color: "#888", margin: "4px 0" }}>
+        <p style={{ fontSize: 12, color: "var(--text)", margin: "4px 0" }}>
           Dimensão do bloco (comprimento × altura × espessura, cm){" "}
           {isCustom && <strong>— personalizada</strong>}
         </p>
@@ -116,7 +116,7 @@ export function DivisionProperties() {
         </label>
 
         <h3 style={{ fontSize: 14, margin: "12px 0 6px" }}>Balcões nesta parede</h3>
-        {freeWall.openings.length === 0 && <p style={{ fontSize: 12, color: "#888" }}>Nenhum ainda.</p>}
+        {freeWall.openings.length === 0 && <p style={{ fontSize: 12, color: "var(--text)" }}>Nenhum ainda.</p>}
         <div style={{ marginBottom: 6 }}>
           {freeWall.openings.map((o) => (
             <div key={o.id} style={{ ...row, fontSize: 12 }}>
@@ -147,7 +147,7 @@ export function DivisionProperties() {
     return (
       <div style={{ minWidth: 260, fontSize: 14 }}>
         <h2 style={{ fontSize: 16, marginBottom: 8 }}>{selectedDivisionIds.length} divisões seleccionadas</h2>
-        <p style={{ fontSize: 12, color: "#888", marginBottom: 8 }}>
+        <p style={{ fontSize: 12, color: "var(--text)", marginBottom: 8 }}>
           Ctrl+C / Ctrl+V copia e cola o grupo todo de uma vez. Nome, largura
           e comprimento ficam bloqueados aqui (são específicos de cada
           divisão) — selecciona só uma (clica sem Shift) para os editar. O
@@ -181,7 +181,7 @@ export function DivisionProperties() {
           </select>
         </label>
 
-        <p style={{ fontSize: 12, color: "#888", margin: "4px 0" }}>
+        <p style={{ fontSize: 12, color: "var(--text)", margin: "4px 0" }}>
           Dimensão do bloco (comprimento × altura × espessura, cm) — aplicada
           a todas as seleccionadas.
         </p>
@@ -212,7 +212,7 @@ export function DivisionProperties() {
         </button>
 
         <h3 style={{ fontSize: 14, margin: "12px 0 6px" }}>Paredes</h3>
-        <p style={{ fontSize: 12, color: "#888", margin: "0 0 4px" }}>
+        <p style={{ fontSize: 12, color: "var(--text)", margin: "0 0 4px" }}>
           Aplica a todas as divisões seleccionadas de uma vez (ex: abrir o
           mesmo lado em várias divisões iguais).
         </p>
@@ -265,7 +265,7 @@ export function DivisionProperties() {
 
   if (!division) {
     return (
-      <div style={{ minWidth: 260, color: "#888", fontSize: 14 }}>
+      <div style={{ minWidth: 260, color: "var(--text)", fontSize: 14 }}>
         Selecciona uma divisão no editor para ver e ajustar as suas
         propriedades (parede, bloco, dimensões).
       </div>
@@ -334,7 +334,7 @@ export function DivisionProperties() {
         </select>
       </label>
 
-      <p style={{ fontSize: 12, color: "#888", margin: "4px 0" }}>
+      <p style={{ fontSize: 12, color: "var(--text)", margin: "4px 0" }}>
         Dimensão usada no cálculo e no desenho (comprimento × altura × espessura, cm){" "}
         {isCustom && <strong>— personalizada</strong>}
       </p>
@@ -396,7 +396,7 @@ export function DivisionProperties() {
       )}
 
       <h3 style={{ fontSize: 14, margin: "12px 0 6px" }}>Paredes</h3>
-      <p style={{ fontSize: 12, color: "#888", margin: "0 0 4px" }}>
+      <p style={{ fontSize: 12, color: "var(--text)", margin: "0 0 4px" }}>
         Remove por completo a parede de um lado (ex: espaço aberto, acesso a
         varanda) — deixa de contar para o cálculo de materiais.
       </p>
@@ -418,10 +418,10 @@ export function DivisionProperties() {
 
       <h3 style={{ fontSize: 14, margin: "12px 0 6px" }}>Portas, janelas e balcões</h3>
       {division.openings.length === 0 && (
-        <p style={{ fontSize: 12, color: "#888" }}>Nenhuma abertura adicionada.</p>
+        <p style={{ fontSize: 12, color: "var(--text)" }}>Nenhuma abertura adicionada.</p>
       )}
       {division.openings.length > 0 && (
-        <p style={{ fontSize: 11, color: "#888", margin: "0 0 4px" }}>
+        <p style={{ fontSize: 11, color: "var(--text)", margin: "0 0 4px" }}>
           Clica num item para o destacar no desenho. Também podes arrastá-las
           directamente no desenho para outra posição ou parede.
         </p>

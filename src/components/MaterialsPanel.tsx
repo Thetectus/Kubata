@@ -41,7 +41,7 @@ export function MaterialsPanel() {
 
       {!collapsed && (
         <>
-          <p style={{ fontSize: 12, color: "#888", margin: "0 0 8px" }}>
+          <p style={{ fontSize: 12, color: "var(--text)", margin: "0 0 8px" }}>
             Área total de parede do projecto: {totalArea.toFixed(1)} m² — usada para itens com
             consumo "por m²" (ex: tinta).
           </p>
@@ -104,7 +104,7 @@ export function MaterialsPanel() {
                             )}
                           </label>
                         ) : (
-                          <span style={{ fontSize: 11, color: "#888" }}>calculado</span>
+                          <span style={{ fontSize: 11, color: "var(--text)" }}>calculado</span>
                         )}
                       </td>
                       <td>
@@ -145,7 +145,7 @@ export function MaterialsPanel() {
                           }}
                           style={{ width: 90 }}
                         />
-                        {m.userPrice === undefined && <span style={{ fontSize: 11, color: "#888" }}> (sugerido)</span>}
+                        {m.userPrice === undefined && <span style={{ fontSize: 11, color: "var(--text)" }}> (sugerido)</span>}
                       </td>
                       <td>{formatKz(quantity * (m.userPrice ?? m.suggestedPrice))}</td>
                       <td>
@@ -166,7 +166,7 @@ export function MaterialsPanel() {
             + Adicionar item (tinta, gesso, mão-de-obra…)
           </button>
 
-          <p style={{ fontSize: 12, color: "#888", marginTop: 12 }}>
+          <p style={{ fontSize: 12, color: "var(--text)", marginTop: 12 }}>
             Preços sugeridos são um valor de partida — os coeficientes de cálculo ainda
             precisam de validação por um engenheiro civil antes de uso em produção.
           </p>

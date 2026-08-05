@@ -50,7 +50,7 @@ export function AiGenerate() {
         {loading ? "A gerar…" : "Gerar divisões"}
       </button>
       {error && <p style={{ color: "#b91c1c", fontSize: 12, marginTop: 6 }}>{error}</p>}
-      <p style={{ fontSize: 11, color: "#888", marginTop: 6 }}>
+      <p style={{ fontSize: 11, color: "var(--text)", marginTop: 6 }}>
         Adiciona divisões novas ao projecto actual (não substitui o que já lá
         está) — depois ajustas dimensões, blocos e aberturas à mão.
       </p>

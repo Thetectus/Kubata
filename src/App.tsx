@@ -138,7 +138,7 @@ function App() {
             </option>
           ))}
         </select>
-        <span style={{ fontSize: 12, color: "#888" }}>
+        <span style={{ fontSize: 12, color: "var(--text)" }}>
           {ready ? "Guardado automaticamente na cloud" : "A carregar…"}
         </span>
       </header>
@@ -195,7 +195,7 @@ function App() {
           <>
             <Editor2D />
             {show3D && (
-              <Suspense fallback={<p style={{ fontSize: 13, color: "#888" }}>A carregar 3D…</p>}>
+              <Suspense fallback={<p style={{ fontSize: 13, color: "var(--text)" }}>A carregar 3D…</p>}>
                 <Preview3D />
               </Suspense>
             )}

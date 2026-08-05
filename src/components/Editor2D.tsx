@@ -220,13 +220,20 @@ export function Editor2D({ expanded = false }: Editor2DProps = {}) {
   const STAGE_HEIGHT = stageSize.height;
 
   useEffect(() => {
-    if (!expanded) {
-      setStageSize({ width: BASE_STAGE_WIDTH, height: BASE_STAGE_HEIGHT });
-      return;
-    }
     function updateSize() {
-      const width = Math.max(BASE_STAGE_WIDTH, (containerRef.current?.clientWidth ?? BASE_STAGE_WIDTH) - 4);
-      const height = Math.max(BASE_STAGE_HEIGHT, window.innerHeight - 260);
+      const containerWidth = containerRef.current?.clientWidth ?? BASE_STAGE_WIDTH;
+      if (expanded) {
+        const width = Math.max(BASE_STAGE_WIDTH, containerWidth - 4);
+        const height = Math.max(BASE_STAGE_HEIGHT, window.innerHeight - 260);
+        setStageSize({ width, height });
+        return;
+      }
+      // fora do ecrã inteiro: nunca ultrapassa o tamanho base, mas encolhe
+      // para caber em ecrãs mais estreitos (mantendo a proporção) — sem
+      // isto o canvas ficava sempre a 900px fixos e desalinhado do resto
+      // da página em janelas/telemóveis mais estreitos.
+      const width = Math.max(280, Math.min(BASE_STAGE_WIDTH, containerWidth));
+      const height = Math.round(width * (BASE_STAGE_HEIGHT / BASE_STAGE_WIDTH));
       setStageSize({ width, height });
     }
     updateSize();
@@ -285,11 +292,21 @@ export function Editor2D({ expanded = false }: Editor2DProps = {}) {
         const defaultWidth = DEFAULT_OPENING_WIDTH_M[type];
         if (type === "balcao") {
           // balcões podem ser largados livremente em qualquer ponto da
-          // divisão, não só presos a uma parede
-          const margin = 0.15;
-          const freeX = round1(Math.max(margin, Math.min(worldM.x - target.x, target.width - margin)));
-          const freeY = round1(Math.max(margin, Math.min(worldM.y - target.y, target.height - margin)));
-          addOpening(target.id, { type, side: "top", offsetM: 0, widthM: defaultWidth, freeX, freeY });
+          // divisão, não só presos a uma parede — freeX/freeY é o canto
+          // superior esquerdo do rectângulo (largar centra-o no ponto)
+          const footprint = 1;
+          const freeX = round1(Math.max(0, Math.min(worldM.x - target.x - footprint / 2, target.width - footprint)));
+          const freeY = round1(Math.max(0, Math.min(worldM.y - target.y - footprint / 2, target.height - footprint)));
+          addOpening(target.id, {
+            type,
+            side: "top",
+            offsetM: 0,
+            widthM: defaultWidth,
+            freeX,
+            freeY,
+            freeWidthM: footprint,
+            freeHeightM: footprint,
+          });
         } else {
           const { side, offset } = nearestSideAndOffset(
             { x: worldM.x - target.x, y: worldM.y - target.y },
@@ -409,7 +426,14 @@ export function Editor2D({ expanded = false }: Editor2DProps = {}) {
   const grandTotal = totalCost(materials, totalArea);
 
   return (
-    <div ref={containerRef} style={{ flex: expanded ? "1 1 auto" : undefined, minWidth: 0 }}>
+    <div
+      ref={containerRef}
+      style={
+        expanded
+          ? { flex: "1 1 auto", minWidth: 0 }
+          : { width: "100%", maxWidth: BASE_STAGE_WIDTH, minWidth: 0, boxSizing: "border-box" }
+      }
+    >
       <div style={{ display: "flex", gap: 6, marginBottom: 6, flexWrap: "wrap", alignItems: "center" }}>
         <button type="button" onClick={() => zoomBy(1.2)} title="Aproximar">
           +
@@ -420,7 +444,7 @@ export function Editor2D({ expanded = false }: Editor2DProps = {}) {
         <button type="button" onClick={fitToView}>
           Ajustar à vista
         </button>
-        <span style={{ fontSize: 12, color: "#888" }}>
+        <span style={{ fontSize: 12, color: "var(--text)" }}>
           {Math.round(view.scale * 100)}% — arrasta o fundo para navegar, roda o rato para zoom
         </span>
         {selectedDivisionIds.length > 1 && (
@@ -539,14 +563,19 @@ export function Editor2D({ expanded = false }: Editor2DProps = {}) {
                     const hasCollision = colliding.has(o.id);
 
                     if (isFree) {
-                      const size = Math.max(10, o.widthM * PX_PER_METER * 0.4);
+                      const fwM = o.freeWidthM ?? 1;
+                      const fhM = o.freeHeightM ?? 1;
+                      const fx = o.freeX! * PX_PER_METER;
+                      const fy = o.freeY! * PX_PER_METER;
+                      const fwPx = fwM * PX_PER_METER;
+                      const fhPx = fhM * PX_PER_METER;
                       return (
                         <Rect
                           key={o.id}
-                          x={o.freeX! * PX_PER_METER - size / 2}
-                          y={o.freeY! * PX_PER_METER - size / 2}
-                          width={size}
-                          height={size}
+                          x={fx}
+                          y={fy}
+                          width={fwPx}
+                          height={fhPx}
                           cornerRadius={3}
                           fill={OPENING_FILL[o.type]}
                           stroke={openingSelected ? "#ff3b8d" : "#3a2a1a"}
@@ -570,13 +599,8 @@ export function Editor2D({ expanded = false }: Editor2DProps = {}) {
                           }}
                           onDragEnd={(e) => {
                             e.cancelBubble = true;
-                            const margin = 0.15;
-                            const freeX = round1(
-                              Math.max(margin, Math.min((e.target.x() + size / 2) / PX_PER_METER, d.width - margin)),
-                            );
-                            const freeY = round1(
-                              Math.max(margin, Math.min((e.target.y() + size / 2) / PX_PER_METER, d.height - margin)),
-                            );
+                            const freeX = round1(Math.max(0, Math.min(e.target.x() / PX_PER_METER, d.width - fwM)));
+                            const freeY = round1(Math.max(0, Math.min(e.target.y() / PX_PER_METER, d.height - fhM)));
                             updateOpening(d.id, o.id, { freeX, freeY });
                           }}
                         />
@@ -709,58 +733,88 @@ export function Editor2D({ expanded = false }: Editor2DProps = {}) {
                       ));
                     })}
 
-                  {/* alça de tamanho do balcão livre: um canto, redimensiona o marcador */}
+                  {/* alças do balcão livre: 4 cantos + 4 lados, tal como as divisões —
+                      expande/encolhe em qualquer direcção */}
                   {d.openings
                     .filter((o) => o.id === selectedOpeningId && o.freeX !== undefined && o.freeY !== undefined)
-                    .map((o) => {
-                      const size = Math.max(10, o.widthM * PX_PER_METER * 0.4);
-                      const cx = o.freeX! * PX_PER_METER;
-                      const cy = o.freeY! * PX_PER_METER;
-                      const hx = cx + size / 2;
-                      const hy = cy + size / 2;
-                      return (
-                        <Rect
-                          key={`${o.id}-size`}
-                          x={hx - 5}
-                          y={hy - 5}
-                          width={10}
-                          height={10}
-                          fill="#ff3b8d"
-                          cornerRadius={2}
-                          onMouseEnter={(e) => {
-                            const stage = e.target.getStage();
-                            if (stage) stage.container().style.cursor = "nwse-resize";
-                          }}
-                          onMouseLeave={(e) => {
-                            const stage = e.target.getStage();
-                            if (stage) stage.container().style.cursor = "default";
-                          }}
-                          onMouseDown={(e) => {
-                            e.cancelBubble = true;
-                            const stage = stageRef.current;
-                            if (!stage) return;
-                            const containerEl = stage.container();
+                    .flatMap((o) => {
+                      const fwM0 = o.freeWidthM ?? 1;
+                      const fhM0 = o.freeHeightM ?? 1;
+                      const fxPx = o.freeX! * PX_PER_METER;
+                      const fyPx = o.freeY! * PX_PER_METER;
+                      const fwPx = fwM0 * PX_PER_METER;
+                      const fhPx = fhM0 * PX_PER_METER;
+                      return RESIZE_HANDLES.map((h) => {
+                        const pos = resizeHandlePosition(h.side, fwPx, fhPx);
+                        return (
+                          <Rect
+                            key={`${o.id}-${h.side}`}
+                            x={fxPx + pos.x - 5}
+                            y={fyPx + pos.y - 5}
+                            width={10}
+                            height={10}
+                            fill="#ff3b8d"
+                            cornerRadius={2}
+                            onMouseEnter={(e) => {
+                              const stage = e.target.getStage();
+                              if (stage) stage.container().style.cursor = h.cursor;
+                            }}
+                            onMouseLeave={(e) => {
+                              const stage = e.target.getStage();
+                              if (stage) stage.container().style.cursor = "default";
+                            }}
+                            onMouseDown={(e) => {
+                              e.cancelBubble = true;
+                              const stage = stageRef.current;
+                              if (!stage) return;
+                              const containerEl = stage.container();
+                              const start = { freeX: o.freeX!, freeY: o.freeY!, freeWidthM: fwM0, freeHeightM: fhM0 };
 
-                            function onMove(ev: MouseEvent) {
-                              const rect = containerEl.getBoundingClientRect();
-                              const worldPx = {
-                                x: (ev.clientX - rect.left - view.x) / view.scale,
-                                y: (ev.clientY - rect.top - view.y) / view.scale,
-                              };
-                              const rel = { x: worldPx.x - d.x * PX_PER_METER, y: worldPx.y - d.y * PX_PER_METER };
-                              const distPx = Math.max(rel.x - cx, rel.y - cy) * 2;
-                              const newWidthM = Math.max(0.2, Math.min(distPx / PX_PER_METER / 0.4, 4));
-                              updateOpening(d.id, o.id, { widthM: round1(newWidthM) });
-                            }
-                            function onUp() {
-                              window.removeEventListener("mousemove", onMove);
-                              window.removeEventListener("mouseup", onUp);
-                            }
-                            window.addEventListener("mousemove", onMove);
-                            window.addEventListener("mouseup", onUp);
-                          }}
-                        />
-                      );
+                              function onMove(ev: MouseEvent) {
+                                const rect = containerEl.getBoundingClientRect();
+                                const worldPx = {
+                                  x: (ev.clientX - rect.left - view.x) / view.scale,
+                                  y: (ev.clientY - rect.top - view.y) / view.scale,
+                                };
+                                const rel = { x: worldPx.x - d.x * PX_PER_METER, y: worldPx.y - d.y * PX_PER_METER };
+                                const relM = { x: rel.x / PX_PER_METER, y: rel.y / PX_PER_METER };
+                                let freeX = start.freeX;
+                                let freeY = start.freeY;
+                                let freeWidthM = start.freeWidthM;
+                                let freeHeightM = start.freeHeightM;
+                                if (h.side.includes("left")) {
+                                  const right = start.freeX + start.freeWidthM;
+                                  freeX = Math.max(0, Math.min(relM.x, right - 0.2));
+                                  freeWidthM = right - freeX;
+                                }
+                                if (h.side.includes("right")) {
+                                  freeWidthM = Math.max(0.2, Math.min(relM.x - start.freeX, d.width - start.freeX));
+                                }
+                                if (h.side.includes("top")) {
+                                  const bottom = start.freeY + start.freeHeightM;
+                                  freeY = Math.max(0, Math.min(relM.y, bottom - 0.2));
+                                  freeHeightM = bottom - freeY;
+                                }
+                                if (h.side.includes("bottom")) {
+                                  freeHeightM = Math.max(0.2, Math.min(relM.y - start.freeY, d.height - start.freeY));
+                                }
+                                updateOpening(d.id, o.id, {
+                                  freeX: round1(freeX),
+                                  freeY: round1(freeY),
+                                  freeWidthM: round1(freeWidthM),
+                                  freeHeightM: round1(freeHeightM),
+                                });
+                              }
+                              function onUp() {
+                                window.removeEventListener("mousemove", onMove);
+                                window.removeEventListener("mouseup", onUp);
+                              }
+                              window.addEventListener("mousemove", onMove);
+                              window.addEventListener("mouseup", onUp);
+                            }}
+                          />
+                        );
+                      });
                     })}
 
                   <Text
@@ -1129,7 +1183,7 @@ export function Editor2D({ expanded = false }: Editor2DProps = {}) {
           </Layer>
         </Stage>
       </div>
-      <p style={{ fontSize: 11, color: "#888", marginTop: 4 }}>
+      <p style={{ fontSize: 11, color: "var(--text)", marginTop: 4 }}>
         Shift+clique selecciona várias divisões · Delete apaga · Ctrl+C/Ctrl+V
         copia/cola · Ctrl+A selecciona todas · Ctrl+Z desfaz. Selecciona uma
         só para veres os botões "+" à volta (cria divisão igual encostada a
